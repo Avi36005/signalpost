@@ -1,0 +1,101 @@
+[
+  {
+    "url": "https://builderr.ai/challenges/signalpost",
+    "path": "docs/requirements/challenge.html",
+    "retrieved_at": "2026-09-14T12:14:20.182970+00:00",
+    "sha256": "f6807dca638c8602165f6018c3c5a192b7315e624af2529a1b1533968dd74a0b",
+    "bytes": 75337,
+    "status": 200,
+    "final_url": "https://builderr.ai/challenges/signalpost"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost.md",
+    "path": "docs/requirements/brief.md",
+    "retrieved_at": "2026-09-14T12:14:20.249415+00:00",
+    "sha256": "9bc3dee4575e3c73a3e0aa7502801d703c66c2641be52700bcc59ae8902d8e32",
+    "bytes": 10033,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost.md"
+  },
+  {
+    "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+    "path": "docs/requirements/evaluation.md",
+    "retrieved_at": "2026-09-14T12:14:20.292775+00:00",
+    "sha256": "4898a37d0c99c4ff27fd87a4feec9a0117264d6b64f183e5e208afdb5edcfaa7",
+    "bytes": 6845,
+    "status": 200,
+    "final_url": "https://builderr.ai/docs/signalpost-evaluation-harness.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+    "path": "docs/requirements/sources.md",
+    "retrieved_at": "2026-09-14T12:14:20.350201+00:00",
+    "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630",
+    "bytes": 2567,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-sources.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md",
+    "path": "docs/requirements/playbook.md",
+    "retrieved_at": "2026-09-14T12:14:20.402476+00:00",
+    "sha256": "7edbb705af9b20469ef78a60644734e3895c1b6b444253f149645056421bb7b8",
+    "bytes": 5153,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md",
+    "path": "docs/requirements/learning.md",
+    "retrieved_at": "2026-09-14T12:14:20.499817+00:00",
+    "sha256": "3a3915e312010cb6ab6cf613135aa52acad6245b0db0d1dda3374dc27c2fed9a",
+    "bytes": 6102,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md"
+  },
+  {
+    "url": "https://builderr.ai/signalpost",
+    "path": "docs/requirements/product.html",
+    "retrieved_at": "2026-09-14T12:14:20.674404+00:00",
+    "sha256": "0a0c54014a1c021043db18cee8801511a796bac3237c6e8fc0f9bf01c4e7daef",
+    "bytes": 22922,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost"
+  },
+  {
+    "url": "https://builderr.ai/guidelines",
+    "path": "docs/requirements/guidelines.html",
+    "retrieved_at": "2026-09-14T12:14:20.971584+00:00",
+    "sha256": "d899fcf33053712fc94afd0a827721e81c96332557c4ee25c8ca065d834937e0",
+    "bytes": 61032,
+    "status": 200,
+    "final_url": "https://builderr.ai/guidelines"
+  },
+  {
+    "url": "https://builderr.ai/start",
+    "path": "docs/requirements/start.html",
+    "retrieved_at": "2026-09-14T12:14:21.296022+00:00",
+    "sha256": "2241b59f369515794c16cf256699e0ae84d16c3403edbdb4d324d56638bfe983",
+    "bytes": 44705,
+    "status": 200,
+    "final_url": "https://builderr.ai/start"
+  },
+  {
+    "url": "https://builderr.ai/signalpost-starter-kit.tar.gz",
+    "path": "downloads/starter.tar.gz",
+    "retrieved_at": "2026-09-13T13:41:07.266195+00:00",
+    "sha256": "3a8bd83edd75fe788792ed7d060911236850d184605da3bdbefee44fcb6bb571",
+    "bytes": 245697,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost-starter-kit.tar.gz"
+  },
+  {
+    "url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz",
+    "path": "downloads/universe.jsonl.gz",
+    "retrieved_at": "2026-09-13T13:41:08.735785+00:00",
+    "sha256": "1c89710e5b01f8617e86d09fbdff4a52f2f8dbbba297e74f7164b5984f5a0384",
+    "bytes": 12631607,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "supplied_archive": "signalpost-starter-kit.tar.gz",
+  "sha256": "3a8bd83edd75fe788792ed7d060911236850d184605da3bdbefee44fcb6bb571",
+  "matches_downloaded_official_archive": true,
+  "extracted_to": "downloads/user-starter",
+  "safe_members": 79,
+  "checked_at": "2026-09-13T13:56:58.585199+00:00",
+  "working_starter": "vendor/signalpost-starter-kit",
+  "note": "Existing working starter preserved; its operations.py has a documented Windows portability patch."
+}

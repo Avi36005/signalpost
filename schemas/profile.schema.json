@@ -1,0 +1,342 @@
+{
+  "$defs": {
+    "Availability": {
+      "enum": [
+        "available",
+        "not_available",
+        "blocked",
+        "not_applicable",
+        "ambiguous",
+        "failed"
+      ],
+      "title": "Availability",
+      "type": "string"
+    },
+    "Claim": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "semantic_key": {
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        },
+        "availability": {
+          "$ref": "#/$defs/Availability",
+          "default": "available"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period"
+        },
+        "effective_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective At"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "original_unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Unit"
+        },
+        "scope": {
+          "default": "legal_entity",
+          "title": "Scope",
+          "type": "string"
+        },
+        "derived_from": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Derived From",
+          "type": "array"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "first_observed_at": {
+          "title": "First Observed At",
+          "type": "string"
+        },
+        "last_observed_at": {
+          "title": "Last Observed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "semantic_key",
+        "field",
+        "family",
+        "value",
+        "first_observed_at",
+        "last_observed_at"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Evidence": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "organisation_number": {
+          "title": "Organisation Number",
+          "type": "string"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        },
+        "source_class": {
+          "title": "Source Class",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "content_sha256": {
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "snapshot_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Snapshot Path"
+        },
+        "retention": {
+          "default": "permitted_open_data",
+          "title": "Retention",
+          "type": "string"
+        },
+        "extraction_method": {
+          "default": "aviscope-deterministic-v1",
+          "title": "Extraction Method",
+          "type": "string"
+        },
+        "identity_basis": {
+          "title": "Identity Basis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "organisation_number",
+        "source_url",
+        "source_class",
+        "retrieved_at",
+        "content_sha256",
+        "locator",
+        "identity_basis"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "aviscope-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "organisation_number": {
+      "title": "Organisation Number",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "source_snapshots": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Source Snapshots",
+      "type": "array"
+    },
+    "availability": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Availability",
+      "type": "object"
+    },
+    "identity_links": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Identity Links",
+      "type": "array"
+    },
+    "candidate_ledger": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Candidate Ledger",
+      "type": "array"
+    },
+    "decisions": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "review_queue": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Review Queue",
+      "type": "array"
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "title": "Summary",
+      "type": "object"
+    },
+    "refresh": {
+      "additionalProperties": true,
+      "title": "Refresh",
+      "type": "object"
+    },
+    "operations": {
+      "additionalProperties": true,
+      "title": "Operations",
+      "type": "object"
+    },
+    "researched_at": {
+      "title": "Researched At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "organisation_number"
+  ],
+  "title": "Profile",
+  "type": "object"
+}

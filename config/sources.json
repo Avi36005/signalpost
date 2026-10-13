@@ -1,0 +1,13 @@
+{
+  "version": "2026-09-13-v2",
+  "official": {
+    "domain": "data.brreg.no",
+    "terms_url": "https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html",
+    "licence": "NLOD 2.0",
+    "reviewed_at": "2026-09-13",
+    "access_allowed": true,
+    "retention_allowed": true
+  },
+  "domains": {},
+  "external_policy": "Company-owned websites (a registry-linked entity's own site: home page, sitemap-linked news/investor/careers/location/contact pages) are permitted by default per the official Signalpost source policy (docs/requirements/sources.md), which lists company-owned sources as preferred and does not require per-domain terms pre-review. Named third-party platforms in fetch.RESTRICTED (LinkedIn, Meta, Instagram, Indeed, Glassdoor, Google, Bing, YouTube, X/Twitter) remain hard-blocked pending licensed access. `domains` is an explicit override/denylist: an entry with access_allowed:false or retention_allowed:false blocks that specific domain even though it is not a restricted platform. Robots.txt, SSRF-safe DNS pinning, exact-entity identity gating and outbound budget limits remain enforced on every company-owned fetch."
+}

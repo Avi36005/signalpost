@@ -1,0 +1,101 @@
+[
+  {
+    "url": "https://builderr.ai/challenges/signalpost",
+    "path": "docs/requirements/challenge.html",
+    "retrieved_at": "2026-09-13T13:41:07.068481+00:00",
+    "sha256": "7545b1bc32efceff00f2d7468adf03a831e8472d7f9efd483a5ff8c7f02d3133",
+    "bytes": 70477,
+    "status": 200,
+    "final_url": "https://builderr.ai/challenges/signalpost"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost.md",
+    "path": "docs/requirements/brief.md",
+    "retrieved_at": "2026-09-13T13:41:07.093674+00:00",
+    "sha256": "64f69e140ea77de98869a810eed0496a4329d180e7e4e10d75bb8a3384fb3010",
+    "bytes": 10060,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost.md"
+  },
+  {
+    "url": "https://builderr.ai/docs/signalpost-evaluation-harness.md",
+    "path": "docs/requirements/evaluation.md",
+    "retrieved_at": "2026-09-13T13:41:07.073798+00:00",
+    "sha256": "013507056a4501a8ebdaa56ffc8a0d2b9d8b1c1efa36e303d14227dbb3461ed0",
+    "bytes": 6422,
+    "status": 200,
+    "final_url": "https://builderr.ai/docs/signalpost-evaluation-harness.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-sources.md",
+    "path": "docs/requirements/sources.md",
+    "retrieved_at": "2026-09-13T13:41:07.055645+00:00",
+    "sha256": "f080470ab29d5c6da243d812e35d0ae0aa3d35f5871d62dfef90422df1b8f630",
+    "bytes": 2567,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-sources.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md",
+    "path": "docs/requirements/playbook.md",
+    "retrieved_at": "2026-09-13T13:41:07.121556+00:00",
+    "sha256": "7edbb705af9b20469ef78a60644734e3895c1b6b444253f149645056421bb7b8",
+    "bytes": 5153,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-agent-playbook.md"
+  },
+  {
+    "url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md",
+    "path": "docs/requirements/learning.md",
+    "retrieved_at": "2026-09-13T13:41:07.136566+00:00",
+    "sha256": "3a3915e312010cb6ab6cf613135aa52acad6245b0db0d1dda3374dc27c2fed9a",
+    "bytes": 6102,
+    "status": 200,
+    "final_url": "https://builderr.ai/starter-briefs/signalpost-learning-harness.md"
+  },
+  {
+    "url": "https://builderr.ai/signalpost",
+    "path": "docs/requirements/product.html",
+    "retrieved_at": "2026-09-13T13:41:07.434716+00:00",
+    "sha256": "813b603186dc9a12a734bcec4909e6ada17ad3c858477abd3e042de4374bbd2f",
+    "bytes": 1761011,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost"
+  },
+  {
+    "url": "https://builderr.ai/guidelines",
+    "path": "docs/requirements/guidelines.html",
+    "retrieved_at": "2026-09-13T13:41:07.192949+00:00",
+    "sha256": "8e977d57a76a33a4086f362d31c7b7ba6d1f262d1c4bacd2b8ee3d123d714d63",
+    "bytes": 61032,
+    "status": 200,
+    "final_url": "https://builderr.ai/guidelines"
+  },
+  {
+    "url": "https://builderr.ai/start",
+    "path": "docs/requirements/start.html",
+    "retrieved_at": "2026-09-13T13:41:07.479405+00:00",
+    "sha256": "b4567a518a821c50c8c3e1ded3b6f0bb6e967ab6b0094c934e9f40e74d70ff24",
+    "bytes": 44705,
+    "status": 200,
+    "final_url": "https://builderr.ai/start"
+  },
+  {
+    "url": "https://builderr.ai/signalpost-starter-kit.tar.gz",
+    "path": "downloads/starter.tar.gz",
+    "retrieved_at": "2026-09-13T13:41:07.266195+00:00",
+    "sha256": "3a8bd83edd75fe788792ed7d060911236850d184605da3bdbefee44fcb6bb571",
+    "bytes": 245697,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost-starter-kit.tar.gz"
+  },
+  {
+    "url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz",
+    "path": "downloads/universe.jsonl.gz",
+    "retrieved_at": "2026-09-13T13:41:08.735785+00:00",
+    "sha256": "1c89710e5b01f8617e86d09fbdff4a52f2f8dbbba297e74f7164b5984f5a0384",
+    "bytes": 12631607,
+    "status": 200,
+    "final_url": "https://builderr.ai/signalpost-company-universe-2025.jsonl.gz"
+  }
+]

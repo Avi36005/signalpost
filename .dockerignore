@@ -1,0 +1,11 @@
+.git
+.venv
+downloads
+out
+dist
+reports
+image.png
+*.tar.gz
+**/__pycache__
+**/.venv
+.env
