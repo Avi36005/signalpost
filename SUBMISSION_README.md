@@ -1,6 +1,6 @@
 # Reviewer entrypoint — AviScope
 
-This is a **local, incomplete-entry review bundle**, not a submitted or qualified agent. The generated `submission-manifest.json` is authoritative for source hash, actual counts, metrics and readiness blockers. All company data is live researched official data; tests/fixtures are explicitly separate. External coverage, independent human quality review, source-release rights and reviewer access remain pending.
+This is a **local, incomplete-entry review bundle**, not a submitted or qualified agent. The generated `submission-manifest.json` is authoritative for source hash, actual counts, metrics and readiness blockers. All company data comes from live researched sources; tests/fixtures are explicitly separate. External coverage, independent human quality review, source-release rights and reviewer access remain pending.
 
 ## Package map
 
@@ -27,4 +27,4 @@ The reviewer supplies `reviewer-input.jsonl`; it is not an undisclosed packaged 
 
 `source/scripts/package_submission.py --verify PATH_TO_ZIP` rejects traversal, extracts to a fresh directory, checks payload checksums, parses JSON/JSONL and audits manifest/profile/envelope/evidence relationships. Initial packaging also performs a clean locked install and fresh offline zero-request cardinality smoke. That smoke proves package execution, not live coverage. Actual live results are separate reports.
 
-No email was sent, repository visibility changed, reviewer invited, or hosted deployment published. The repository URL in the manifest reflects the configured origin; exact remote source availability is still pending until an authorized push/access check.
+No email was sent, repository visibility changed, reviewer invited, or hosted deployment published. The manifest uses the user-specified Signalpost repository destination and separately records the existing trading origin. Exact remote source availability is pending an authorized push/access check.
