@@ -6,7 +6,7 @@ import socket
 import pytest
 from fastapi.testclient import TestClient
 
-from aviscope.extract import detect_conflicts, html_document, identity_gate, next_sources, norwegian_number, official_extract, pointer, summarize
+from aviscope.extract import detect_conflicts, domain_matches_name, html_document, identity_gate, next_sources, norwegian_number, official_extract, pointer, social_profile, summarize
 from aviscope.fetch import Broker, Budget, BudgetExceeded, PolicyError, public_addresses, safe_url
 from aviscope.models import Profile, add_claim, org_number
 from aviscope.refresh import apply_refresh
@@ -98,15 +98,60 @@ def test_domain_explicit_denylist_override(tmp_path):
 
 @pytest.mark.parametrize('text,accepted',[
     ('AMBITA AS organisation 945 811 714',True),
-    ('AMBITA AS official website',False),
+    # A homepage the company itself declared to the registry that shows its exact legal name.
+    ('AMBITA AS official website',True),
     ('AMBITA AS 945 811 714 parent 917886113',False),
     ('AMBITA AS domain is for sale 945811714',False),
     ('Different franchise AS 945811714',False),
-    ('AMBITA AS 945 x 811 x 714',False),
     ('Our portfolio includes AMBITA AS and many companies',False),
+    ('Kunder: AMBITA AS, Nordic Bygg AS og Fjord Data AS',False),
+    # A checksum-invalid nine-digit number is not a competing organisation identifier.
+    ('AMBITA AS 945811714 kundenummer 123456789',True),
 ])
 def test_exact_identity(text,accepted):
     assert identity_gate(ORG,'AMBITA AS',{'text':text},registry_linked=True)['publishable']==accepted
+
+
+def test_scrambled_number_is_not_a_number_match():
+    result=identity_gate(ORG,'AMBITA AS',{'text':'AMBITA AS 945 x 811 x 714'},registry_linked=True)
+    assert not result['organisation_number_present'] and result['reason']=='Registry-listed domain; exact legal name on page'
+
+
+@pytest.mark.parametrize('text,host,registry,accepted',[
+    ('Velkommen',          'www.ambita.no',  True,  True),   # registry-declared domain spelling the legal name
+    ('Velkommen',          'www.ambita.no',  False, False),  # guessed domain needs on-page proof
+    ('Org.nr 945 811 714', 'www.ambita.no',  False, True),
+    ('AMBITA AS',          'www.ambita.no',  False, True),   # exact legal name on a domain spelling it
+    ('AMBITA AS',          'www.other.no',   False, False),
+    ('Org.nr 945 811 714', 'www.other.no',   False, False),  # guessed host must relate to the entity
+    ('AMBITA AS',          'boligen.obos.no',True,  False),  # shared housing-cooperative portal
+])
+def test_identity_tiers(text,host,registry,accepted):
+    assert identity_gate(ORG,'AMBITA AS',{'text':text},registry_linked=registry,host=host)['publishable']==accepted
+
+
+@pytest.mark.parametrize('url,expected',[
+    ('https://www.facebook.com/ambita.no/',{'platform':'facebook','url':'https://facebook.com/ambita.no'}),
+    ('https://no.linkedin.com/company/ambita-as/about',{'platform':'linkedin','url':'https://www.linkedin.com/company/ambita-as'}),
+    ('https://www.youtube.com/@ambita',{'platform':'youtube','url':'https://youtube.com/@ambita'}),
+    ('https://www.facebook.com/sharer/sharer.php?u=https://ambita.no',None),
+    ('https://twitter.com/intent/tweet?text=x',None),
+    ('https://www.linkedin.com/in/some-person',None),
+    ('https://www.instagram.com/p/Cx1/',None),
+])
+def test_social_profile_links(url,expected):
+    assert social_profile(url)==expected
+
+
+@pytest.mark.parametrize('name,host,expected',[
+    ('JAKT OG FJELLSPORT AS','www.jaktogfjellsport.no',True),
+    ('KONGSBERG REGNSKAPSTJENESTER AS','kongsberg-regnskapstjenester.no',True),
+    ('BØRRE & SØNN AS','www.borre-og-sonn.no',True),
+    ('SMALVOLLSKOGEN BORETTSLAG','www.obos.no',False),
+    ('AMBITA AS','www.ambitalegal.no',False),
+])
+def test_domain_spelling(name,host,expected):
+    assert domain_matches_name(host,name)==expected
 
 
 def test_prompt_injection_is_text():
@@ -188,3 +233,43 @@ def test_local_api_receipts_and_write_controls(tmp_path):
     assert client.post('/api/research',content='test',headers={'Content-Type':'text/plain'}).status_code==415
     assert client.post('/api/research',json={'organisation_numbers':['123456789']}).status_code==422
     assert client.get('/api/health',headers={'host':'attacker.example'}).status_code==400
+
+
+@pytest.mark.parametrize('content',[
+    '945811714\n917886113\n',
+    'organisasjonsnummer;navn\n945811714;A\n917886113;B\n',
+    '["945811714","917886113"]',
+    '{"organisation_number":"945811714"}\n{"orgnr":"917886113"}\n',
+    '"945811714"\n"917886113"\n',
+])
+def test_input_formats(tmp_path,content):
+    path=tmp_path/'batch.txt';path.write_text(content)
+    assert read_inputs(path)==[ORG,'917886113']
+
+
+def test_batch_size_is_not_fixed_at_100(tmp_path):
+    manifest=tmp_path/'input.txt';manifest.write_text(ORG+'\n')
+    args=parser().parse_args(['--organisations',str(manifest),'--output-dir',str(tmp_path/'o'),'--max-requests','0'])
+    report=run(args)
+    assert report['terminal_count']==1 and args.expected_count is None
+
+
+def test_https_host_header_has_no_port(monkeypatch,tmp_path):
+    import http.client, ssl as ssl_module
+    from aviscope import fetch as fetch_module
+    seen={}
+    class Sock:
+        def close(self): pass
+    monkeypatch.setattr(fetch_module,'public_addresses',lambda host,port:['2001:db8::1','93.184.216.34'])
+    tried=[]
+    def connect(address,timeout):
+        tried.append(address[0])
+        return Sock()
+    monkeypatch.setattr(socket,'create_connection',connect)
+    monkeypatch.setattr(ssl_module.SSLContext,'wrap_socket',lambda self,sock,server_hostname: sock)
+    def request(self,method,url,headers):
+        seen.update(headers); raise OSError('stop')
+    monkeypatch.setattr(http.client.HTTPConnection,'request',request)
+    broker=Broker(tmp_path,Budget(max_requests=5))
+    with pytest.raises(OSError): broker._request('https://www.example.no/',5,1000)
+    assert seen['Host']=='www.example.no' and tried[0]=='93.184.216.34'

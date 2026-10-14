@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .extract import pointer, html_document
+from .extract import pointer, html_document, site_root
 from .models import Profile
 from .runner import file_hash, read_inputs, read_jsonl, write_json
 
@@ -76,13 +76,30 @@ def audit(directory, universe_path=None):
                             _,start,end=locator.split(':');start,end=int(start),int(end)
                             span=doc['text'][start:end]
                             import re
-                            valid=0<=start<end<=len(doc['text']) and re.sub(r'\D','',span)==p['organisation_number'] and c['value']==e['source_url']
+                            exact_number=re.sub(r'\D','',span)==p['organisation_number']
+                            exact_name=bool(p.get('name')) and re.sub(r'\s+',' ',span).rstrip('.').casefold()==re.sub(r'\s+',' ',p['name']).strip().casefold()
+                            valid=0<=start<end<=len(doc['text']) and (exact_number or exact_name) and c['value'] in (e['source_url'],site_root(e['source_url']))
                         except (ValueError,TypeError): pass
+                    elif locator.startswith('host:'):
+                        from .extract import domain_matches_name
+                        from urllib.parse import urlsplit
+                        host=locator[len('host:'):]
+                        valid=urlsplit(e['source_url']).hostname==host and c['value'] in (e['source_url'],site_root(e['source_url'])) and domain_matches_name(host,p.get('name'))
+                    elif locator.startswith('link:'):
+                        from .extract import social_profile
+                        try: link=doc['links'][int(locator[len('link:'):])]
+                        except (ValueError,IndexError): link=None
+                        valid=bool(link) and isinstance(c['value'],dict) and link['url']==c['value'].get('href') and social_profile(link['url'])=={k:c['value'][k] for k in ('platform','url')}
                     elif locator=='css:meta[name="description"]@content':
                         valid=doc['description'] is not None and doc['description']==c['value']
+                    elif locator=='css:meta[property="og:site_name"]@content':
+                        valid=doc.get('site_name') is not None and doc['site_name']==c['value']
                     elif locator.startswith('jsonld:/'):
                         node=pointer(doc['structured'],locator[len('jsonld:'):])
-                        valid=isinstance(node,dict) and isinstance(c['value'],dict) and all(node.get(k)==v for k,v in c['value'].items())
+                        if isinstance(node,str):
+                            valid=isinstance(c['value'],dict) and node==c['value'].get('href')
+                        else:
+                            valid=isinstance(node,dict) and isinstance(c['value'],dict) and all(node.get(k)==v for k,v in c['value'].items())
                     if valid: html_locators+=1
                     else: failures.append(f"{p['organisation_number']}: HTML locator or value mismatch {locator}")
             if c['availability']=='available' and c['value'] is None: failures.append('Null marked available')

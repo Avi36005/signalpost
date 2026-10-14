@@ -129,14 +129,25 @@ class Broker:
         parsed = urlsplit(url)
         port = 443 if parsed.scheme == 'https' else 80
         addresses = public_addresses(parsed.hostname, port)
-        # Connect to the already validated IP; do not resolve hostname a second time.
-        sock = socket.create_connection((addresses[0], port), timeout=timeout)
+        # Connect to an already validated IP; do not resolve hostname a second time.
+        # IPv4 first: many hosts publish AAAA records that are unreachable from IPv4-only runners.
+        sock, last_error = None, None
+        for address in sorted(addresses, key=lambda a: ':' in a)[:4]:
+            try:
+                sock = socket.create_connection((address, port), timeout=min(timeout, 6))
+                break
+            except OSError as exc:
+                last_error = exc
+        if sock is None:
+            raise last_error or OSError('No reachable address')
         try:
             if parsed.scheme == 'https':
                 sock = ssl.create_default_context().wrap_socket(sock, server_hostname=parsed.hostname)
+            # The Host header must not carry ':443' (HTTPConnection's default for a non-80 port):
+            # some servers answer that with a self-redirect loop.
             connection = http.client.HTTPConnection(parsed.hostname, port, timeout=timeout)
             connection.sock = sock
-            connection.request('GET', urlunsplit(('', '', parsed.path or '/', parsed.query, '')), headers={'User-Agent': USER_AGENT, 'Accept': 'application/json,text/html,application/pdf,text/plain;q=0.8', 'Accept-Encoding': 'identity', 'Connection': 'close'})
+            connection.request('GET', urlunsplit(('', '', parsed.path or '/', parsed.query, '')), headers={'Host': parsed.hostname, 'User-Agent': USER_AGENT, 'Accept': 'application/json,text/html,application/pdf,text/plain;q=0.8', 'Accept-Encoding': 'identity', 'Connection': 'close'})
             response = connection.getresponse()
             chunks = []
             total = 0
@@ -157,6 +168,11 @@ class Broker:
             return response.status, dict(response.getheaders()), b''.join(chunks)
         finally:
             sock.close()
+
+    def slot_delay(self, key):
+        """Seconds until the next polite start on a throttle schedule (0 when free)."""
+        with self.lock:
+            return max(0.0, self.host_next.get(key, 0) - time.monotonic())
 
     def _throttle(self, host, interval):
         with self.lock:
@@ -180,7 +196,7 @@ class Broker:
                 return self.cache[url]
         requested = url
         chain = []
-        for redirect in range(5):
+        for redirect in range(8):
             url = safe_url(url)
             self.permitted(url, source_class)
             if source_class != 'official_registry' and check_robots and url != requested:
@@ -189,8 +205,10 @@ class Broker:
             if self.failures.get(host, 0) >= 12:
                 raise PolicyError('Host circuit breaker open after repeated failures')
             for attempt in range(2):
-                interval = 2.1 if '/aarsregnskap/kopi/' in url else .18 if source_class == 'official_registry' else 1.0
-                self._throttle(host, interval)
+                filing_copy = '/aarsregnskap/kopi/' in url
+                interval = 2.1 if filing_copy else .18 if source_class == 'official_registry' else 1.0
+                # The rate-limited filing-copy route has its own schedule so it never delays identity reads.
+                self._throttle(host + '#filing-copy' if filing_copy else host, interval)
                 self.budget.reserve()
                 with self.lock:
                     with (self.root / 'requests.jsonl').open('a', encoding='utf-8') as journal:
@@ -259,12 +277,13 @@ class Broker:
             parser = self.robots.get(origin)
         if parser is None:
             snap, body = self.fetch(origin + '/robots.txt', 'company_owned', check_robots=False)
-            if snap['status'] == 404:
+            if 400 <= snap['status'] < 500 and snap['status'] != 429:
+                # RFC 9309 section 2.3.1.3: an unavailable (4xx) robots.txt means no crawl restrictions.
                 parser = RobotFileParser(); parser.parse([])
             elif snap['status'] == 200:
                 parser = RobotFileParser(); parser.parse(body.decode('utf-8', 'replace').splitlines())
             else:
-                raise PolicyError('Robots permission unavailable')
+                raise PolicyError('Robots permission unavailable' + (': site unreachable' if snap['status'] == 0 else ': HTTP ' + str(snap['status'])))
             with self.lock:
                 self.robots[origin] = parser
         if not parser.can_fetch(USER_AGENT, url):

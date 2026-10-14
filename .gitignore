@@ -20,3 +20,4 @@ vendor/**/out/
 vendor/**/.pytest_cache/
 docs/requirements/*.html
 docs/screenshots/
+.DS_Store

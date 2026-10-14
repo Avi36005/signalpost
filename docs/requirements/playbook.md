@@ -103,3 +103,19 @@ Abstention is allowed and must be reported. It cannot be used to hide low covera
 
 LinkedIn, Meta, Glassdoor, Indeed and similar platforms have access restrictions. Use only official, licensed or otherwise permitted access. Open-source or unofficial clients may be evaluated in a private experiment, but they do not make prohibited collection permissible and cannot be the sole support for a published claim.
 
+
+## Common traps
+
+Most entries that cannot be scored fail here rather than on the research.
+
+**Your agent picks its own companies.** We hand it the official company batch at run time, chosen after the daily cutoff. Some will be companies you have never seen. Read them from that file. An agent working from its own list cannot be scored, however good the research is.
+
+**It handles one company at a time.** We need a batch: 100 company numbers in, 100 results out, from one run. This is usually a wrapper around what you already have rather than a rewrite.
+
+**There is no single command to run it.** Give one command that can be pasted. A list of steps or a notebook cannot be run automatically.
+
+**It does not install on a clean machine.** Clone your own repository into a new folder at the pinned commit, make an empty virtual environment, run only your declared install step, then your run command. That check matches ours and catches packages you installed months ago and forgot about.
+
+**It returns fewer than 100 results.** Every company comes back, including the ones you found nothing for. Each result carries one of `available`, `not_available`, `blocked`, `not_applicable`, `ambiguous` or `failed`. If we hand you 100 and 60 come back, we cannot tell whether the rest were blocked, empty or crashed, so the run cannot be scored. "I found nothing" is a valid answer. A missing row is not. Never return zero in place of missing information.
+
+**You think you cannot use an LLM.** You can. Each run has a small external API budget, and if you need a model key for scoring, ask and we will supply one. What we cannot use is a credential tied to your own account on another service, because we cannot reproduce your run with it.

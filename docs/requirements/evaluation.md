@@ -4,13 +4,13 @@ Status: scoring version 2, effective 26 August 2026 for every Round 1 entrant. R
 
 ## In plain language
 
-Build a program that researches companies and keeps their profiles current. Submit at least 1,000 completed profiles; the daily test uses the same 100 random companies for every entered agent, drawn from the full 411,160-company list.
+Build a program that researches companies and keeps their profiles current. Test it locally on 100 companies; Builderr supplies the official company batch for scoring and gives the same current batch to every eligible frozen entry.
 
 We combine independently checked findings from all submissions and Builderr's own crawlers into one reference collection. New verified findings update the collection, and every entrant is rescored against the same version. This is the checked information we have found, not a claim that we found everything online.
 
-For each information type, 70% of its coverage score measures how many companies you covered and 30% measures how many individual facts you found. Example: the collection has 50 job postings across 20 companies. Finding 30 postings across 15 companies gives 60% of postings and 75% of companies: 70% × 75% + 30% × 60% = 70.5% for that information type. This contributes to the 35 coverage points according to its field weight; it is not the total score.
+For each information type, 70% of its coverage score measures how many companies you covered and 30% measures how many individual facts you found. Example: the collection has 50 job postings across 20 companies. Finding 30 postings across 15 companies gives 60% of postings and 75% of companies: 70% × 75% + 30% × 60% = 70.5% for that information type. This feeds the 50 recall and coverage points; it is not the total score.
 
-The remaining points check correctness (30), reliable updates (20), useful explanations (10) and ease of use (5). Passing also requires 65/100 overall, 21/35 coverage, 60% weighted external company recall, 95% external precision and every hard gate below. Company-matching precision is separate from factual accuracy; fabricated financial values or material wrong-company publication still fail.
+The remaining points check precision and evidence (30), useful explanations (12) and ease of use (8). An entry qualifies with an official run and at least 65/100 overall. Coverage, recall and precision are scored dimensions, not separate qualification thresholds. Company-matching precision is separate from factual accuracy; fabricated financial values or a material wrong-company publication prevent the run from becoming official.
 
 The exact requirements follow.
 
@@ -18,11 +18,12 @@ The exact requirements follow.
 
 - Universe: Norway-registered entities with observed annual-account records.
 - Public universe: all 411,160 eligible organisation numbers.
-- Minimum submitted artifact: 1,000 completed profiles plus its exact organisation-number manifest. Larger submissions are allowed.
+- Local scale test: 100 companies. Larger local tests, including 1,000 or more companies, are encouraged but their precomputed profiles are not submitted or scored.
 - Public product sample: 100 profiles at `/signalpost`.
-- Daily evaluation: the same 100 organisations are randomly selected after the cutoff for every frozen agent, on each scheduled test day through 21 October.
-- The public universe is not hidden. Freshness, exact attribution and reproducible execution—not secrecy of the organisation number—are what the daily run tests.
-- Every entrant receives the same batch, cutoff, network policy and resource budget.
+- Official evaluation: Builderr selects the current shared batch after each cutoff; every eligible frozen entry receives the same batch. The shared set may grow—for example, from 1,000 to 1,100 companies—and all active entries are run on the same expanded set.
+- Completed runs add to a cumulative, locked checked reference set used when scores are updated.
+- The public universe is available for local testing. Freshness, exact attribution and reproducible execution—not a submitted static profile file—are what the official run tests.
+- Every entrant receives the same batch, cutoff, network policy and resource budget. A timeout or missing result is not scored; a Builderr infrastructure failure is rerun.
 - Eligible-universe uncompressed content SHA-256: `b82d6a3e7231d1759a958c282bc4366b80ec2fab8095053d8ed7fa9cd01bc838`.
 - Public `.jsonl.gz` archive SHA-256: `1c89710e5b01f8617e86d09fbdff4a52f2f8dbbba297e74f7164b5984f5a0384`.
 
@@ -32,21 +33,16 @@ Exactly one terminal envelope per input organisation number. Envelopes must cont
 
 ## Scoring — 100
 
-1. Coverage and source discovery — 35
-2. Accuracy, exact identity and evidence — 30
-3. Refresh and extensibility — 20
-4. Decision-useful synthesis — 10
-5. UX and interaction — 5
+1. Recall and coverage — 50
+2. Precision, exact identity and evidence — 30
+3. Decision-useful synthesis — 12
+4. UX and interaction — 8
 
-Coverage and exact attribution control 65 points. For every external field family, coverage is 70% company recall and 30% individual-claim recall against the independently verified union of discoveries from every submitted crawler and Builderr’s own crawlers. The union is cumulative and versioned: each verified addition creates a new pool hash and every entrant is rescored against that same latest version. The final union freezes only after all eligible final submissions have been verified.
+Recall and coverage control 50 points. For every external field family, coverage is 70% company recall and 30% individual-claim recall against the independently verified union of discoveries from every submitted crawler and Builderr’s own crawlers. The union is cumulative and versioned: each verified addition creates a new pool hash and every entrant is rescored against that same latest version. The final union freezes only after all eligible final submissions have been verified.
 
-## Hard gates
-
-- At least 21/35 coverage.
-- At least 60% weighted external company recall across measurable field families.
-- At least 95% external exact-entity precision.
-- The submitted public artifact has at least 1,000 completed profiles and a matching manifest.
-- Every daily 100-company input produces exactly 100 terminal envelopes.
+## Official-run checks
+- The submitted public artifact includes a 100-company smoke-test result or report.
+- Every official input produces exactly one terminal envelope per company.
 - No fabricated financial value or material wrong-company publication.
 - Published material claims have source, retrieval time and reporting period where relevant.
 - Missing values are never silently converted to zero.
@@ -55,22 +51,21 @@ Coverage and exact attribution control 65 points. For every external field famil
 - Setup is reproducible with pinned dependencies and one evaluator command.
 - Source rights, secrets and outbound URL policy are documented and safe.
 
-Qualification is 65/100 plus all hard gates. Final ranking uses the mean across every scheduled daily batch while an entrant has an active frozen version. An entrant-caused failed or missed batch scores zero after Builderr reproduces the failure in a clean evaluator run. A batch affected by Builderr's harness, infrastructure or a shared-source failure is void and rerun for every affected entrant with the same frozen code. Ties break on fewer wrong-company publications, then higher weighted company recall, then lower declared third-party cost.
+Qualification is an official run with 65/100 or more. Official-run checks establish whether the run is valid; they do not create additional score bars. Final ranking uses the mean across every scheduled daily batch while an entrant has an active frozen version. An entrant-caused failed or missed batch scores zero after Builderr reproduces the failure in a clean evaluator run. A batch affected by Builderr's harness, infrastructure or a shared-source failure is void and rerun for every affected entrant with the same frozen code. Ties break on fewer wrong-company publications, then higher weighted company recall, then lower declared third-party cost.
 
-## Locked evaluator budget
+## Official run requirements
 
-- 100 inputs
-- 45 minutes wall clock
-- 8 vCPU, 16 GB RAM and 10 GB temporary disk
-- 2,000 total outbound requests, including redirects and retries
-- $10 maximum declared third-party API spend
+- The current official input batch, supplied by Builderr (1,000 companies now; it may grow to 1,100)
+- A fixed time and resource budget supplied equally to every entrant
+- Exactly one terminal envelope for every input company
+- A timeout or missing result is not scored. A Builderr infrastructure failure is rerun for every affected entry.
 - server-side secrets supplied through documented environment variables only
 
-Builderr provides the frozen official registry snapshot used for identity anchoring. External caches must be declared. Cached public-universe material is allowed, but the daily score still enforces source timestamps, refresh behavior and the same evidence cutoff for everyone.
+Builderr provides the frozen official registry snapshot used for identity anchoring. External caches must be declared. Cached public-universe material is allowed, but the official score still enforces source timestamps, refresh behavior and the same evidence cutoff for everyone.
 
 The first submission is version 1. Entrants may then submit up to four revised exact commit hashes, for five versions total. Revisions close 18 October 2026, take effect only after being frozen for the next daily run, and never replace earlier batch results.
 
-If the verified pool has fewer than 15 positive company-field opportunities across at least three external field families, the 60% weighted external company-recall gate remains pending for that batch. That batch cannot establish a pass or fail for the recall gate. Field families with no verified positive are reported as not measured, not as 0% recall.
+If the verified pool has fewer than 15 positive company-field opportunities across at least three external field families, recall is reported as not measured for that batch rather than as 0%. It remains a scored observation, not a qualification gate.
 
 ## Measurement
 

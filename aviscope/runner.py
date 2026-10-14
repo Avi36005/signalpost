@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import gzip
 import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -53,9 +55,37 @@ def read_jsonl(path, limit=10000):
     return result
 
 
+ORG_KEYS = ('organisation_number', 'organization_number', 'organisasjonsnummer', 'org_number', 'orgnr', 'orgnummer', 'org')
+
+
+def _org_value(x):
+    if isinstance(x, dict):
+        x = next((x[k] for k in ORG_KEYS if x.get(k) not in (None, '')), None)
+    return org_number(str(x).strip().replace(' ', '') if isinstance(x, (str, int)) and not isinstance(x, bool) else x)
+
+
 def read_inputs(path):
-    values = read_jsonl(path)
-    orgs = [org_number(x.get('organisation_number') if isinstance(x, dict) else x) for x in values]
+    """Organisation numbers from JSONL, a JSON array, CSV (any org-number column) or one number per line."""
+    path = Path(path)
+    if path.stat().st_size > 250_000_000: raise ValueError('Input file exceeds 250 MB')
+    opener = gzip.open if path.suffix == '.gz' else open
+    with opener(path, 'rt', encoding='utf-8-sig', newline='') as stream:
+        text = stream.read()
+    stripped = text.strip()
+    if stripped.startswith('['):
+        values = json.loads(stripped)
+    elif stripped.startswith('{') or stripped.startswith('"'):
+        values = [json.loads(line) for line in stripped.splitlines() if line.strip()]
+    else:
+        lines = [line for line in stripped.splitlines() if line.strip()]
+        header = [h.strip().strip('"').lower() for h in re.split(r'[,;\t]', lines[0])] if lines else []
+        if lines and any(h in ORG_KEYS for h in header):
+            column = next(i for i, h in enumerate(header) if h in ORG_KEYS)
+            values = [re.split(r'[,;\t]', line)[column].strip().strip('"') for line in lines[1:]]
+        else:
+            values = [line.strip().strip('"').split(',')[0].split(';')[0] for line in lines]
+    if len(values) > 100_000: raise ValueError('Too many records')
+    orgs = [_org_value(x) for x in values]
     if len(orgs) != len(set(orgs)): raise ValueError('Duplicate organisation numbers')
     return orgs
 
@@ -121,15 +151,17 @@ def parser():
     p.add_argument('--organisations', required=True)
     p.add_argument('--output-dir', required=True)
     p.add_argument('--run-id', default=None)
-    p.add_argument('--expected-count', type=int, default=100)
+    p.add_argument('--expected-count', type=int, default=None, help='Optional cardinality assertion; omitted means any batch size')
     p.add_argument('--bulk', help='Optional evaluator-supplied Brreg CSV/JSONL, optionally gzipped')
     p.add_argument('--registry-retrieved-at', help='Actual provenance timestamp for frozen snapshot')
     p.add_argument('--previous', help='Prior profiles.jsonl; relative evidence resolved beside it')
     p.add_argument('--cutoff', help='Latest permitted evidence retrieval timestamp, ISO UTC; defaults to run deadline')
-    p.add_argument('--max-requests', type=int, default=2000)
-    p.add_argument('--max-seconds', type=float, default=2600)
+    p.add_argument('--max-requests', type=int, default=None, help='Outbound request ceiling; default 40 per input company')
+    p.add_argument('--max-seconds', type=float, default=None, help='Wall-clock ceiling; default 2.7 s per company, at least 2,600 s. Set it below the evaluator limit')
     p.add_argument('--max-cost', type=float, default=10)
-    p.add_argument('--workers', type=int, default=8)
+    p.add_argument('--workers', type=int, default=8, help='Official-registry workers (1..8)')
+    p.add_argument('--enrich-workers', type=int, default=24, help='Company-website workers (1..64); distinct hosts, each host politely throttled')
+    p.add_argument('--no-guess-domains', action='store_true', help='Only research registry-listed websites')
     p.add_argument('--source-policy', default=str(ROOT/'config/sources.json'))
     p.add_argument('--routing', choices=('fixed', 'gap'), default='fixed')
     p.add_argument('--history', action='store_true', help='Fetch available filing years at <= 1 start / 2.1 seconds')
@@ -139,9 +171,12 @@ def parser():
 
 def run(args, on_progress=None):
     if not 1 <= args.workers <= 8: raise ValueError('Workers must be 1..8')
-    if args.max_requests < 0 or args.max_seconds <= 0 or args.max_cost < 0: raise ValueError('Invalid budget')
+    if not 1 <= getattr(args, 'enrich_workers', 24) <= 64: raise ValueError('Enrichment workers must be 1..64')
     orgs = read_inputs(args.organisations)
-    if len(orgs) != args.expected_count: raise ValueError(f'Expected {args.expected_count} unique inputs, found {len(orgs)}')
+    if args.expected_count is not None and len(orgs) != args.expected_count: raise ValueError(f'Expected {args.expected_count} unique inputs, found {len(orgs)}')
+    if args.max_requests is None: args.max_requests = 40 * len(orgs)
+    if args.max_seconds is None: args.max_seconds = max(2600.0, 2.7 * len(orgs))
+    if args.max_requests < 0 or args.max_seconds <= 0 or args.max_cost < 0: raise ValueError('Invalid budget')
     out = Path(args.output_dir); out.mkdir(parents=True, exist_ok=True)
     lock_path = out / '.run.lock'
     if args.resume and lock_path.exists():
@@ -207,32 +242,52 @@ def _run(args, orgs, out, on_progress):
         write_json(checkpoint, {'settings': settings, 'run_id': run_id, 'started_at': started_at, 'elapsed_seconds': elapsed_before + time.monotonic()-budget.started, 'bytes': budget.bytes, 'baseline_done': sorted(baseline_done), 'done': sorted(done), 'profiles': state})
         if on_progress: on_progress(progress)
     save('official_baseline')
+    guess = not getattr(args, 'no_guess_domains', False)
+    save_lock = threading.Lock()
+
+    def baseline_result(org, future):
+        try:
+            profile = future.result()
+            if args.bulk and org not in frozen:
+                # Frozen identity source is authoritative. A missing row cannot silently fall back to live identity.
+                profile = Profile(organisation_number=org).model_dump(mode='json')
+                profile['errors'].append({'module': 'legal_identity', 'reason': 'Entity absent from evaluator frozen registry'})
+                profile['availability']['legal_identity'].update(state='failed', reason='Absent from supplied frozen registry')
+        except Exception as exc:
+            profile = Profile(organisation_number=org).model_dump(mode='json')
+            profile['errors'].append({'module': 'runner', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
+        return profile
+
     try:
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            tasks = {pool.submit(baseline, org, broker, frozen.get(org, False) if args.bulk else None): org for org in orgs if org not in baseline_done}
+        # Every company's official baseline is scheduled first, at the registry's polite rate.
+        # Website research starts per company as soon as its baseline lands; it uses other hosts,
+        # so it overlaps with, rather than delays, the remaining official reads.
+        with ThreadPoolExecutor(max_workers=args.workers) as official_pool, ThreadPoolExecutor(max_workers=getattr(args, 'enrich_workers', 24)) as web_pool:
+            enrich_tasks = {}
+
+            def start_enrichment(org):
+                # A private copy: checkpoints serialise `state` while enrichment is still running.
+                enrich_tasks[web_pool.submit(enrich, copy.deepcopy(state[org]), broker, args.routing, args.history, guess)] = org
+
+            for org in orgs:
+                if org in baseline_done and org not in done:
+                    start_enrichment(org)
+            tasks = {official_pool.submit(baseline, org, broker, frozen.get(org, False) if args.bulk else None): org for org in orgs if org not in baseline_done}
             for future in as_completed(tasks):
                 org = tasks[future]
-                try:
-                    state[org] = future.result()
-                    if args.bulk and org not in frozen:
-                        # Frozen identity source is authoritative. A missing row cannot silently fall back to live identity.
-                        state[org] = Profile(organisation_number=org).model_dump(mode='json')
-                        state[org]['errors'].append({'module': 'legal_identity', 'reason': 'Entity absent from evaluator frozen registry'})
-                        state[org]['availability']['legal_identity'].update(state='failed', reason='Absent from supplied frozen registry')
-                except Exception as exc:
-                    state[org] = Profile(organisation_number=org).model_dump(mode='json')
-                    state[org]['errors'].append({'module': 'runner', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
-                baseline_done.add(org)
-                if len(baseline_done) % 10 == 0 or len(baseline_done) == len(orgs): save('official_baseline')
-        # Everyone gets an official-data opportunity before any optional external/history requests.
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            tasks = {pool.submit(enrich, state[org], broker, args.routing, args.history): org for org in orgs if org not in done}
-            for future in as_completed(tasks):
-                org = tasks[future]
+                state[org] = baseline_result(org, future)
+                with save_lock:
+                    baseline_done.add(org)
+                start_enrichment(org)
+                if len(baseline_done) % 25 == 0 or len(baseline_done) == len(orgs):
+                    with save_lock: save('official_baseline')
+            for future in as_completed(list(enrich_tasks)):
+                org = enrich_tasks[future]
                 try: state[org] = future.result()
                 except Exception as exc: state[org]['errors'].append({'module': 'enrichment', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
                 state[org] = finish(state[org], previous.get(org)); done.add(org)
-                if len(done) % 10 == 0 or len(done) == len(orgs): save('enrichment')
+                if len(done) % 25 == 0 or len(done) == len(orgs):
+                    with save_lock: save('enrichment')
     finally:
         stop.set(); monitor_thread.join(timeout=1)
     profiles = [state[org] for org in orgs]
@@ -248,7 +303,7 @@ def _run(args, orgs, out, on_progress):
     researched = sum(bool(p['name'] and any(not c['stale'] for c in p['claims'])) for p in profiles)
     fully_covered = sum(all(v['state'] == 'available' for v in p['availability'].values()) for p in profiles)
     disk = sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
-    report = {'schema_version': 'aviscope-run-1', 'run_id': run_id, 'source_commit': source_version(), 'source_code_sha256': code_hash(), 'dependency_lock_sha256': file_hash(ROOT/'uv.lock'), 'input_sha256': file_hash(args.organisations), 'started_at': started_at, 'completed_at': now(), 'cutoff': cutoff.isoformat(), 'command': [sys.executable, '-m', 'aviscope.runner', *sys.argv[1:]], 'settings': settings, 'environment': {'python': platform.python_version(), 'platform': platform.platform(), 'workers': args.workers}, 'input_count': len(orgs), 'terminal_count': len(envelopes), 'unique_profiles': len(profiles), 'researched_profiles': researched, 'partial_profiles': researched-fully_covered, 'all_families_available_profiles': fully_covered, 'failed_inputs': len(orgs)-researched, 'supported_claims': sum(len(p['claims']) for p in profiles), 'fresh_claims': sum(sum(not c['stale'] for c in p['claims']) for p in profiles), 'operations': {**budget.metrics(), 'runtime_seconds': round(runtime, 3), 'peak_memory_bytes': peak, 'temporary_disk_bytes': disk, 'p50_company_seconds': timings[len(timings)//2] if timings else None, 'p95_company_seconds': timings[min(len(timings)-1, int(len(timings)*.95))] if timings else None}, 'field_coverage': {f: sum(p['availability'][f]['state'] == 'available' for p in profiles) for f in profiles[0]['availability']} if profiles else {}, 'validation': {'exact_cardinality': len(envelopes) == len(orgs), 'unique_association': [e['organisation_number'] for e in envelopes] == orgs, 'schema_validated': True}, 'quality_metrics': {'official_score': None, 'official_qualification': 'not_determined', 'external_exact_entity_precision': None, 'weighted_external_recall': None, 'independent_review': 'pending'}, 'budget_checks': {'requests': budget.requests <= args.max_requests, 'wall_time': runtime <= args.max_seconds + 10, 'memory': peak <= 16_000_000_000, 'temporary_disk': disk <= 10_000_000_000, 'cost': budget.cost <= args.max_cost}, 'snapshot_mode': 'evaluator_supplied' if args.bulk else 'live_development_registry', 'setup_downloads_included': False, 'setup_accounting': 'Requirements, universe and dependency downloads are separately recorded setup; no external company response cache loaded'}
+    report = {'schema_version': 'aviscope-run-1', 'run_id': run_id, 'source_commit': source_version(), 'source_code_sha256': code_hash(), 'dependency_lock_sha256': file_hash(ROOT/'uv.lock'), 'input_sha256': file_hash(args.organisations), 'started_at': started_at, 'completed_at': now(), 'cutoff': cutoff.isoformat(), 'command': [sys.executable, '-m', 'aviscope.runner', *sys.argv[1:]], 'settings': settings, 'environment': {'python': platform.python_version(), 'platform': platform.platform(), 'workers': args.workers, 'enrich_workers': getattr(args, 'enrich_workers', 24), 'guess_domains': guess}, 'input_count': len(orgs), 'terminal_count': len(envelopes), 'unique_profiles': len(profiles), 'researched_profiles': researched, 'partial_profiles': researched-fully_covered, 'all_families_available_profiles': fully_covered, 'failed_inputs': len(orgs)-researched, 'supported_claims': sum(len(p['claims']) for p in profiles), 'fresh_claims': sum(sum(not c['stale'] for c in p['claims']) for p in profiles), 'operations': {**budget.metrics(), 'runtime_seconds': round(runtime, 3), 'peak_memory_bytes': peak, 'temporary_disk_bytes': disk, 'p50_company_seconds': timings[len(timings)//2] if timings else None, 'p95_company_seconds': timings[min(len(timings)-1, int(len(timings)*.95))] if timings else None}, 'field_coverage': {f: sum(p['availability'][f]['state'] == 'available' for p in profiles) for f in profiles[0]['availability']} if profiles else {}, 'validation': {'exact_cardinality': len(envelopes) == len(orgs), 'unique_association': [e['organisation_number'] for e in envelopes] == orgs, 'schema_validated': True}, 'quality_metrics': {'official_score': None, 'official_qualification': 'not_determined', 'external_exact_entity_precision': None, 'weighted_external_recall': None, 'independent_review': 'pending'}, 'budget_checks': {'requests': budget.requests <= args.max_requests, 'wall_time': runtime <= args.max_seconds + 10, 'memory': peak <= 16_000_000_000, 'temporary_disk': disk <= 10_000_000_000, 'cost': budget.cost <= args.max_cost}, 'snapshot_mode': 'evaluator_supplied' if args.bulk else 'live_development_registry', 'setup_downloads_included': False, 'setup_accounting': 'Requirements, universe and dependency downloads are separately recorded setup; no external company response cache loaded'}
     write_json(out/'run-report.json', report); save('completed')
     return report
 
