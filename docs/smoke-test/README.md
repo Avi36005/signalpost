@@ -1,6 +1,6 @@
 # 100-company smoke-test result
 
-The 100-company smoke test the October contract requires, run on commit `168f3ca` with:
+The 100-company smoke test the October contract requires, run on commit `62e36cc` (the submitted commit; the run report records the full hash in `source_commit`) with:
 
 ```sh
 uv run python -m aviscope.runner --organisations data/live-100.jsonl --output-dir out/smoke-100 --history --max-cost 0
@@ -13,6 +13,6 @@ uv run python -m aviscope.audit --directory out/smoke-100 --universe downloads/u
 | `smoke-100-envelopes.jsonl.gz` | One terminal envelope per input: claims, evidence, availability, cited summary |
 | `smoke-100-run-report.json` | Counts, requests, runtime, memory, field coverage, budget checks |
 | `smoke-100-integrity.json` | Evidence audit: hashes, JSON pointers, financial equality, HTML locators |
-| `scale-1000-*.json` | Optional 1,000-company local scale test on the same commit |
+| `scale-1000-*.json` | Optional 1,000-company local scale test, run earlier on commit `168f3ca` |
 
-Result: 100/100 terminal envelopes, 0 failed inputs, 793 requests, 142 s, $0 third-party cost, integrity audit passed. Raw evidence snapshots (14 MB) are not committed; rerun the command to regenerate them. Measurements and the before/after comparison are in `EVAL.md`.
+Result: 100/100 terminal envelopes, 0 failed inputs, 803 requests, 144 s, $0 third-party cost, integrity audit passed. Raw evidence snapshots (14 MB) are not committed; rerun the command to regenerate them. Measurements and the before/after comparison are in `EVAL.md`.

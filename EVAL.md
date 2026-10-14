@@ -2,6 +2,8 @@
 
 The eligible universe has 411,160 unique companies and matches both hashes in the official contract. Seed 20260913 shuffles the frozen universe into disjoint local splits: 1,000 scale-test companies (`data/entry-companies.jsonl`), 20 development, 20 validation and a 100-company holdout (`data/live-100.jsonl`, used as the smoke test). These are local splits, not Builderr's official batch.
 
+The committed 100-company smoke test (`docs/smoke-test/`) was rerun on commit `62e36cc` after the review fixes: same 100 inputs, 100/100 terminal envelopes, 803 requests, 144 s, $0, integrity audit passed, external coverage unchanged (7 verified websites). The table below is the earlier `168f3ca` measurement.
+
 ## October 14 measurements (commit `168f3ca`, live registry, macOS, 8 registry + 24 website workers)
 
 Before/after comparisons use the **same companies** as the September runs.
