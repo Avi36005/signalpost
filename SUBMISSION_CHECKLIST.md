@@ -1,20 +1,16 @@
-# Submission checklist
+# Submission checklist (October 2026 contract)
 
-The final generated package manifest and reports contain the measured values. This source checklist intentionally does not imply that an unrun future corpus is already complete.
+Builderr now asks for: the repository URL, the exact commit hash, a 100-company smoke-test result or report, one pasteable run command, the models/APIs/licences used, the expected cost per official run, an agent name and a contact. Precomputed profiles and a company manifest are no longer submitted. Revisions are accepted until Oct 18 (five versions in total).
 
-- [x] Read/freeze current contract, brief, playbook, learning policy and source rules with hashes.
-- [x] Verify universe content/archive hashes and deterministic disjoint organisation splits.
-- [x] Implement real official research, claim receipts, six availability states, safe broker, refresh, comparison and local UI.
-- [x] Run starter replay, original/regression tests and a live smoke with auditable financial evidence.
-- [x] Document all prize categories, rights, enabled APIs, zero paid spend, limitations and unresolved rules.
-- [ ] Confirm final 1,000 researched-profile count, exact eligible manifest and complete evidence audit in generated reports.
-- [ ] Confirm final representative live-100 budget report from frozen source.
-- [ ] Company-owned external discovery is now enabled by default and verified live (robots/identity-gate correctly enforced); full-corpus external hit rate and whether it is sufficient for the challenge coverage gates (>=21/35, >=60% weighted external recall) is still unmeasured, and independent identity/claim quality review is still pending.
-- [ ] Verify final ZIP, extracted setup/smoke, checksums and full exact source hash.
-- [ ] Confirm source redistribution terms for the starter with no explicit licence file.
-- [ ] Confirm repository destination, authorize push/read-only access, and verify the exact commit is accessible to reviewers.
-- [ ] Publish the exact organisation manifest under authorized access and record its real URL.
-- [ ] Supply verified entrant contact for results (surname only if the entrant chooses to provide it).
-- [ ] Review final email and send it explicitly. No automatic submission, revision, invitation or deployment.
+- [x] Re-read the current challenge, brief, evaluation contract, playbook and source policy (2026-10-14; hashes in `docs/requirements/provenance.json`).
+- [x] One command for any batch size and input format: `uv sync --frozen && uv run python -m aviscope.runner --organisations BATCH_FILE --output-dir out/official --history --max-cost 0`.
+- [x] Clean-clone check: fresh clone, empty environment, `uv sync --frozen`, run command, full test suite.
+- [x] 100-company smoke test on the pushed commit: `out/smoke-100/run-report.json` and `reports/smoke-100-integrity.json` (100/100 terminal envelopes, audit passed).
+- [x] Optional 1,000-company local scale test: `out/scale-1000/run-report.json`.
+- [x] Models/APIs/licences: no model; Brønnøysundregistrene open APIs (NLOD 2.0) and company-owned websites; $0 expected third-party cost per official run.
+- [ ] Confirm starter redistribution terms (no LICENSE file in the starter archive).
+- [ ] Give Builderr reviewers read access to `github.com/Avi36005/signalpost` at the submitted commit.
+- [ ] Ask Builderr for the official run's time limit and set `--max-seconds` below it.
+- [ ] Send the submission email to `submit@builderr.ai` (never sent automatically).
 
-Readiness flags used by the generated manifest: `implementation_complete`, `local_validation_passed`, `submission_artifacts_complete`, `reviewer_access_verified`, `email_ready`. Qualification is always `not_determined` unless Builderr confirms otherwise. Official independent quality remains unverified even when local tests pass.
+Qualification stays `not_determined` until Builderr scores an official run.

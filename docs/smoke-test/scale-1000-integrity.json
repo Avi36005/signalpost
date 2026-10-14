@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "profiles": 1000,
+  "terminal_envelopes": 1000,
+  "unique_inputs": 1000,
+  "eligible_membership_verified": true,
+  "retained_snapshots_hash_checked": 4936,
+  "json_locators_resolved": 41910,
+  "html_locators_resolved": 284,
+  "financial_values_matched_to_source": 18972,
+  "failures": [],
+  "independent_factual_accuracy": "not_measured",
+  "official_qualification": "not_determined"
+}
