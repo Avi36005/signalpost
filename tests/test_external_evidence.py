@@ -1,5 +1,8 @@
 import json
 
+import pytest
+
+from aviscope import pipeline
 from aviscope.audit import audit
 from aviscope.extract import external_extract, html_document, identity_gate
 from aviscope.fetch import Broker, Budget
@@ -8,6 +11,12 @@ from aviscope.pipeline import enrich, envelope, finish
 from aviscope.runner import write_jsonl
 
 ORG = '945811714'
+
+
+@pytest.fixture(autouse=True)
+def no_dns(monkeypatch):
+    # Guessed-domain fallback must never reach real DNS in tests.
+    monkeypatch.setattr(pipeline, 'resolves', lambda host: False)
 
 
 def make_profile():
@@ -27,12 +36,27 @@ def broker_for(tmp_path, pages):
 
 
 def test_contact_identity_is_scoped_to_verified_page(tmp_path):
-    pages = {'https://example.com/': '<meta name="description" content="Unsupported home claim"><a href="/contact">Contact</a>',
+    pages = {'https://example.com/': '<meta name="description" content="Home description"><a href="/contact">Contact</a>',
              'https://example.com/contact': '<p>AMBITA AS 945 811 714</p>'}
     p = enrich(make_profile(), broker_for(tmp_path, pages))
     assert p['availability']['website']['state'] == 'available'
-    assert [c['value'] for c in p['claims']] == ['https://example.com/']
+    assert [c['value'] for c in p['claims']] == ['https://example.com/', 'Home description']
     assert p['candidate_ledger'][0]['verified_url'].endswith('/contact')
+    website, description = p['claims']
+    evidence = {e['id']: e for e in p['evidence']}
+    # Identity is cited from the contact page; the description from the home page that shows it.
+    assert evidence[website['evidence_ids'][0]]['source_url'].endswith('/contact')
+    home = evidence[description['evidence_ids'][0]]
+    assert home['source_url'] == 'https://example.com/' and home['locator'] == 'css:meta[name="description"]@content'
+    assert 'https://example.com/contact' in home['identity_basis']
+
+
+def test_contact_identity_does_not_cover_home_naming_other_entities(tmp_path):
+    for home in ('<p>Partner 917886113</p>', '<p>Part of OTHERCO HOLDING AS</p>', '<p>domain for sale</p>'):
+        pages = {'https://example.com/': '<meta name="description" content="Home description">' + home + '<a href="/contact">Contact</a>',
+                 'https://example.com/contact': '<p>AMBITA AS 945 811 714</p>'}
+        p = enrich(make_profile(), broker_for(tmp_path, pages), guess=False)
+        assert not any(c['field'] == 'company_description' for c in p['claims']), home
 
 
 def test_shared_home_does_not_authorize_contact_probe(tmp_path):
@@ -174,3 +198,71 @@ def test_one_profile_per_platform_prefers_company_handle(tmp_path):
             '<a href="https://www.facebook.com/Ambita">A</a><a href="https://www.instagram.com/ambita.no">I</a>')
     p = finish(enrich(make_profile(), broker_for(tmp_path, {'https://example.com/': home})))
     assert sorted(c['value']['url'] for c in p['claims'] if c['field'] == 'linked_profile') == ['https://facebook.com/Ambita', 'https://instagram.com/ambita.no']
+
+
+def test_dead_registry_website_falls_back_to_name_spelled_domain(tmp_path, monkeypatch):
+    lookups = []
+    monkeypatch.setattr(pipeline, 'resolves', lambda host: lookups.append(host) or host == 'www.ambita.no')
+    def transport(url, *args):
+        if url.endswith('/robots.txt'): return 404, {}, b''
+        if url.startswith('https://old.example'): return 404, {'Content-Type': 'text/html'}, b'gone'
+        return 200, {'Content-Type': 'text/html'}, '<p>Velkommen til AMBITA AS.</p>'.encode()
+    broker = Broker(tmp_path, Budget(max_requests=20), transport=transport); broker._throttle = lambda *args: None
+    p = make_profile(); p['candidate_ledger'] = [{'url': 'https://old.example/', 'source': 'official_registry', 'status': 'not_attempted'}]
+    p = enrich(p, broker)
+    assert [c['value'] for c in p['claims'] if c['field'] == 'official_website'] == ['https://www.ambita.no/']
+    registry, guess = p['candidate_ledger']
+    assert registry['status'] == 'blocked' and 'HTTP 404' in registry['reason']
+    assert guess['source'] == 'name_derived_domain' and 'after listed candidates failed' in guess['discovery']
+    # A registry website that verifies never triggers guessing.
+    lookups.clear()
+    enrich(make_profile(), broker_for(tmp_path / 'ok', {'https://example.com/': '<p>AMBITA AS 945811714</p>'}))
+    assert lookups == []
+
+
+@pytest.mark.parametrize('name,host,text', [
+    ('GREYSTONE AS', 'greystone.com', 'Information provided to Greystone as a result of obtaining a financial product.'),
+    ('AMALIE AS', 'amalie.com', 'Follow AMALIE as we travel the world.'),
+    ('EXAMPLE AS', 'example.no', 'Welcome to Example Assistance.'),
+    ('GREYSTONE AS', 'greystone.com', 'INFORMATION PROVIDED TO GREYSTONE AS A RESULT OF A FINANCIAL PRODUCT.'),
+    ('AMALIE AS', 'amalie.com', 'FOLLOW AMALIE AS WE TRAVEL THE WORLD.'),
+    ('NORD DA', 'nord.no', 'NORD DA CAPO FESTIVAL'),
+])
+def test_ordinary_words_are_not_legal_suffixes_on_guessed_domains(name, host, text):
+    assert not identity_gate(ORG, name, {'text': text}, host=host)['publishable']
+
+
+@pytest.mark.parametrize('text', ['Velkommen til Amalie AS.', 'AMALIE AS | Kontakt', 'Amalie AS er et norsk selskap', '© 2026 AMALIE AS', 'AMALIE AS, Storgata 1'])
+def test_genuine_norwegian_legal_names_still_match(text):
+    assert identity_gate(ORG, 'AMALIE AS', {'text': text}, host='amalie.no')['publishable']
+
+
+@pytest.mark.parametrize('valid_through,posted,kept', [
+    (None, '2026-09-14', True), ('2026-10-31', '2026-09-14', True), ('2026-10-14', '2026-09-14', True),
+    ('2026-10-13', '2026-09-14', False), ('2026-10-14T08:00:00Z', '2026-09-14', False),
+    ('soon', '2026-09-14', False), (None, '2027-01-01', False), (None, 'yesterday', False),
+])
+def test_job_postings_are_checked_against_retrieval_time(tmp_path, valid_through, posted, kept):
+    job = {'@type': 'JobPosting', 'title': 'Engineer', 'datePosted': posted, 'hiringOrganization': {'taxID': ORG}}
+    if valid_through: job['validThrough'] = valid_through
+    raw = '<p>AMBITA AS 945811714</p><script type="application/ld+json">' + json.dumps(job) + '</script>'
+    broker = broker_for(tmp_path, {'https://example.com/': raw})
+    p = make_profile()
+    snapshot, content = broker.fetch('https://example.com/', 'company_owned')
+    snapshot['retrieved_at'] = '2026-10-14T12:00:00Z'
+    doc = html_document(content, snapshot['final_url'])
+    external_extract(p, doc, snapshot, identity_gate(ORG, p['name'], doc, registry_linked=True))
+    assert any(c['family'] == 'jobs' for c in p['claims']) == kept
+    assert any(d.get('outcome') == 'job_withheld' for d in p['decisions']) != kept
+
+
+def test_summary_facts_cover_web_hiring_and_activity(tmp_path):
+    items = [{'@type': 'JobPosting', 'title': 'Engineer', 'datePosted': '2026-09-14', 'hiringOrganization': {'taxID': ORG}},
+             {'@type': 'NewsArticle', 'headline': 'Ny tjeneste', 'datePublished': '2026-09-01'}]
+    home = ('<meta name="description" content="Eiendomsdata"><p>AMBITA AS 945811714</p><a href="https://www.instagram.com/ambita.no">I</a>'
+            '<script type="application/ld+json">' + json.dumps({'@graph': items}) + '</script>')
+    p = finish(enrich(make_profile(), broker_for(tmp_path, {'https://example.com/': home})))
+    facts = {f['field'] for f in p['summary']['facts']}
+    assert {'official_website', 'company_description', 'job_posting', 'company_article', 'linked_profile'} <= facts
+    ids = {c['id'] for c in p['claims']}
+    assert all(f['claim_id'] in ids and f['scope'] == 'legal_entity' for f in p['summary']['facts'])

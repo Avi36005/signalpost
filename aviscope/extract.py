@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urljoin, urlsplit
 
@@ -158,6 +159,7 @@ def html_document(raw, url):
 
 
 LEGAL_SUFFIX = re.compile(r'\s+(AS|ASA|SA|DA|ANS|NUF|BA|BRL|STI|KF|IKS|SF|ENK)\.?$', re.I)
+AMBIGUOUS_SUFFIXES = ('AS', 'SA', 'DA', 'BA')
 SHARED_HOSTS = ('obos.no', 'usbl.no', 'bate.no', 'tobb.no', 'boligbyggelag.no', 'mallofnorway.com', 'visma.com', 'wix.com', 'wixsite.com', 'squarespace.com', 'webnode.page', 'blogspot.com', 'wordpress.com', 'github.io', 'proff.no', 'gulesider.no', '1881.no', 'purehelp.no', 'brreg.no')
 
 
@@ -225,8 +227,13 @@ def legal_name_span(text, legal_name):
     if not words:
         return None
     pattern = r'(?<![\w])(?i:' + r'\s+'.join(words) + r')' + (r'\s+' + re.escape(suffix.group(1).upper()) + r'\.?' if suffix else '') + r'(?![\w])'
-    match = re.search(pattern, text)
-    return (match.start(), match.end()) if match else None
+    for match in re.finditer(pattern, text):
+        # Suffixes that are also ordinary words ("as", "da", "sa") are ambiguous in all-caps text:
+        # "FOLLOW AMALIE AS WE TRAVEL" is a sentence, not the legal name AMALIE AS.
+        if suffix and suffix.group(1).upper() in AMBIGUOUS_SUFFIXES and re.match(r'\s+[A-ZÆØÅÄÖÜ]+(?![\w.])', text[match.end():]):
+            continue
+        return (match.start(), match.end())
+    return None
 
 
 def valid_org_numbers(text):
@@ -392,6 +399,38 @@ def _employer_conflicts(employer, p):
     return name_core(name).casefold() not in known
 
 
+def _schema_date(value):
+    """A schema.org Date or DateTime as an aware UTC datetime; None when malformed."""
+    if not isinstance(value, str) or not re.match(r'\d{4}-\d{2}-\d{2}', value.strip()):
+        return None
+    text = value.strip().replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(text) if 'T' in text else datetime.fromisoformat(text[:10])
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def job_dates_status(node, evaluated_at):
+    """'current' for a posting that is open at the evaluation time (the page's retrieval time).
+    Expired, not-yet-posted and malformed dates are withheld rather than published as hiring."""
+    at = _schema_date(evaluated_at)
+    posted = _schema_date(node.get('datePosted'))
+    if posted is None or at is None:
+        return 'malformed datePosted'
+    if posted > at + timedelta(days=1):
+        return 'datePosted after evaluation time'
+    if node.get('validThrough') in (None, ''):
+        return 'current'
+    until = _schema_date(node.get('validThrough'))
+    if until is None:
+        return 'malformed validThrough'
+    # A date-only validThrough is open through the whole of that day.
+    if 'T' not in str(node['validThrough']):
+        until += timedelta(days=1)
+    return 'current' if until > at else 'expired before evaluation time'
+
+
 def external_extract(p, document, snapshot, assessment):
     if not assessment['publishable']:
         return
@@ -429,6 +468,10 @@ def external_extract(p, document, snapshot, assessment):
             if _employer_conflicts(employer, p):
                 continue
             if node.get('title') and node.get('datePosted'):
+                status = job_dates_status(node, snapshot['retrieved_at'])
+                if status != 'current':
+                    p['decisions'].append({'route': 'jobs', 'url': snapshot['final_url'], 'outcome': 'job_withheld', 'reason': status, 'title': str(node['title'])[:120], 'datePosted': str(node['datePosted'])[:40], 'validThrough': str(node.get('validThrough'))[:40], 'evaluated_at': snapshot['retrieved_at']})
+                    continue
                 value = {k: node.get(k) for k in ('title', 'datePosted', 'validThrough', 'employmentType', 'jobLocation', 'url')}
                 add_claim(p, 'jobs', 'job_posting', value, snapshot, 'jsonld:/' + location, key=node.get('identifier') if isinstance(node.get('identifier'), str) else [node['title'], node['datePosted']], effective_at=str(node['datePosted']), identity_basis='Exact taxID in hiringOrganization on verified company page' if exact else on_site + '; employer not a different entity')
         elif set(kinds) & {'NewsArticle', 'Article', 'BlogPosting', 'PressRelease'}:
@@ -484,10 +527,13 @@ def summarize(p):
         found = [c for c in pool if c['field'] == field]
         return sorted(found, key=lambda c: (c.get('period') or {}).get('tilDato', ''), reverse=True)[0] if found else None
     facts = []
-    for field in ('registered_activity', 'industry', 'employees', 'revenue', 'annual_result'):
+    for field in ('legal_form', 'registered_activity', 'industry', 'employees', 'revenue', 'operating_result', 'annual_result', 'head_office_address', 'official_website', 'company_description', 'public_brand_name'):
         chosen = first(field)
         if chosen:
-            facts.append({'field': field, 'value': chosen['value'], 'period': chosen.get('period'), 'currency': chosen.get('currency'), 'claim_id': chosen['id']})
+            facts.append({'field': field, 'value': chosen['value'], 'period': chosen.get('period'), 'currency': chosen.get('currency'), 'scope': chosen['scope'], 'claim_id': chosen['id']})
+    for field, limit in (('registered_role', 6), ('job_posting', 5), ('company_article', 3), ('linked_profile', 6)):
+        chosen = sorted((c for c in entity if c['field'] == field and (field != 'registered_role' or (isinstance(c['value'], dict) and c['value'].get('role_code') in LEAD_ROLES))), key=lambda c: str(c.get('effective_at') or ''), reverse=True)[:limit]
+        facts += [{'field': field, 'value': c['value'], 'effective_at': c.get('effective_at'), 'scope': c['scope'], 'claim_id': c['id']} for c in chosen]
     name = p.get('name') or p['organisation_number']
     narrative = []
     def say(text, *claims):

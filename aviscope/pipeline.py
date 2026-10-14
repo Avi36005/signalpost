@@ -5,9 +5,9 @@ import socket
 import time
 from urllib.parse import urlsplit
 
-from .extract import detect_conflicts, domain_labels, external_extract, keep_best_profiles, html_document, identity_gate, next_sources, official_extract, shared_host, summarize
+from .extract import detect_conflicts, domain_labels, external_extract, keep_best_profiles, html_document, identity_gate, next_sources, official_extract, other_legal_names, shared_host, summarize
 from .fetch import BudgetExceeded, PolicyError, safe_url
-from .models import Profile, now
+from .models import Profile, add_claim, now
 from .refresh import apply_refresh
 
 ENDPOINTS = {
@@ -96,6 +96,11 @@ def guessed_candidates(p):
     return found
 
 
+def _bare_host(url):
+    host = urlsplit(url if '://' in url else 'https://' + url).hostname or ''
+    return host.removeprefix('www.')
+
+
 def _probe(p, broker, url, registry_linked):
     """Fetch one candidate home page, then at most two same-host contact/about pages when the home page is inconclusive."""
     snapshot, raw = broker.fetch(url, 'company_owned')
@@ -136,10 +141,19 @@ def _probe(p, broker, url, registry_linked):
 
 def enrich(p, broker, policy='gap', history=False, guess=True):
     started = time.monotonic()
-    if guess and p.get('name') and not any(c.get('source', 'official_registry') == 'official_registry' for c in p['candidate_ledger']):
-        p['candidate_ledger'].extend(guessed_candidates(p))
+    def attempts():
+        yield from list(p['candidate_ledger'][:1 + MAX_GUESSES])
+        # Reached only when no listed candidate verified (missing, dead, blocked or rejected):
+        # fall back to name-spelled domains. They face the same gate; a spelling is a hint, not proof.
+        if guess and p.get('name'):
+            tried = {_bare_host(c['url']) for c in p['candidate_ledger']}
+            fallback = [c for c in guessed_candidates(p) if _bare_host(c['url']) not in tried]
+            if p['candidate_ledger']:
+                for c in fallback: c['discovery'] = 'fallback after listed candidates failed verification'
+            p['candidate_ledger'].extend(fallback)
+            yield from fallback
     verified = None
-    for candidate in p['candidate_ledger'][:1 + MAX_GUESSES]:
+    for candidate in attempts():
         try:
             url = candidate['url']
             if not url.startswith(('https://', 'http://')): url = 'https://' + url
@@ -164,13 +178,23 @@ def enrich(p, broker, policy='gap', history=False, guess=True):
             break
         except (ValueError, OSError, BudgetExceeded) as exc:
             candidate.update(status='blocked' if isinstance(exc, (PolicyError, BudgetExceeded)) else 'failed', reason=str(exc)[:250])
+            if isinstance(exc, BudgetExceeded):
+                break
     if verified:
         url, snapshot, document, assessment, home = verified
         external_extract(p, document, snapshot, assessment)
         if home:
-            # The contact page proved the host; the home page itself still needs its own proof
-            # before its description becomes a claim, but its links are used for routing only.
-            document = home[1]
+            # The contact page proved the host. The home page's own description may be cited from
+            # the home snapshot, but only when that page carries no other identifier, names no other
+            # legal entity and is not parked; the identity basis names the proving page.
+            home_snapshot, document = home
+            check = identity_gate(p['organisation_number'], p['name'], document, host=urlsplit(home_snapshot['final_url']).hostname)
+            if (document.get('description') and urlsplit(home_snapshot['final_url']).hostname == urlsplit(snapshot['final_url']).hostname
+                    and not check['other_organisation_numbers'] and check['reason'] != 'Parked domain'
+                    and not other_legal_names(document['text'], p['name'])
+                    and not any(c['field'] == 'company_description' for c in p['claims'])):
+                add_claim(p, 'brand', 'company_description', document['description'], home_snapshot, 'css:meta[name="description"]@content',
+                          identity_basis=f'Home page of a host whose ownership was proven on {snapshot["final_url"]} ({assessment["reason"]}); text cited from the home page')
         crawl_host = urlsplit(snapshot['final_url']).hostname
         for route in next_sources(document, home[0]['final_url'] if home else snapshot['final_url'], p['availability'], policy, 5):
             if route['url'] == snapshot['final_url']:
