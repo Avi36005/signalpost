@@ -1,0 +1,17 @@
+To: submit@builderr.ai
+Subject: AviScope: question about the 108-of-300 run, Avinash Gehi
+
+Hi Soham,
+
+Thanks for the 2 November feedback. You mentioned the run was scored on the 108 companies it reached, not all 300. I could not work out why from my side, and I don't want to guess. Could you share any of the following?
+
+1. The exact command, including any --max-seconds, timeout or worker settings, and the commit you ran.
+2. What "reached" means here: 108 result lines written in envelopes.jsonl, 108 that passed your checks, or a subset chosen for scoring.
+3. Whether the process ended on its own or was stopped by a time limit, and the last lines of its output or run-report.json if you have them.
+4. The time and request limits for official runs, so I can set --max-seconds below them.
+
+Since then, the runner writes each company's result as soon as it finishes and keeps a margin before its deadline, so every input gets exactly one result even when a source stalls. I have tested this locally with 100, 300, 1,000 and 1,100 inputs. Your details would show whether this covers what happened in your run.
+
+Thanks,
+Avinash Gehi
+avinashgehi3@gmail.com

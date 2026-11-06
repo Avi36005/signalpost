@@ -322,6 +322,10 @@ def social_profile(url):
     host = (parts.hostname or '').lower()
     platform = next((name for domain, name in SOCIAL.items() if host == domain or host.endswith('.' + domain)), None)
     segments = [x for x in parts.path.split('/') if x]
+    # Facebook's current page form is /p/<Page-Name>-<numeric id>; elsewhere /p/ is a single post.
+    fb_page = platform == 'facebook' and len(segments) == 2 and segments[0] == 'p' and re.fullmatch(r'[^/]+-\d{6,}', segments[1])
+    if fb_page:
+        return {'platform': 'facebook', 'url': 'https://facebook.com/p/' + segments[1]}
     if not platform or not segments or segments[0].lower() in NOT_PROFILE or parts.query.lower().startswith(('u=', 'url=', 'text=')):
         return None
     if platform == 'linkedin' and (segments[0] not in ('company', 'school', 'showcase') or len(segments) < 2):

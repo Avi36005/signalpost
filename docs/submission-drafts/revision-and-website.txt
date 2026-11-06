@@ -1,0 +1,36 @@
+To: submit@builderr.ai
+Subject: AviScope: Signalpost revision and JBox website, Avinash Gehi, {{short_commit}}
+
+Hi Soham,
+
+Thank you for the feedback on AviScope. This revision addresses it as follows.
+
+What changed
+- Revenue change in the summary: the latest filed revenue is compared with the immediately preceding period of the same scope, currency and unit, with the absolute and percentage change and a citation for both filed figures. If no comparable period exists, the summary gives the reason instead of a percentage, and a group figure is never used in place of the company's own. On the 100-company smoke test, {{smoke_revenue_compared}} companies were compared and {{smoke_revenue_not_compared}} were not.
+- Websites now need proof on the page: a site is published only when the fetched page itself shows the company's exact legal name or organisation number. A domain that merely spells the name no longer counts. Pages that name another legal entity, such as a parent, group, sibling or client list, are withheld. This addresses the two group/parent sites you found. I did not hard-code the companies you named.
+- Social profiles are published from links on a confirmed company site and from JSON-LD sameAs, one per platform, when the handle matches the company. Facebook's newer page links (facebook.com/p/Name-id) are now recognised. Platform pages are never fetched. On this sample, {{smoke_company_profiles}} companies have a linked profile.
+- Runs now always finish: results are written as soon as each company finishes, the run keeps a deadline margin for writing output, and every input gets exactly one result, marked failed or partial if needed, even when a source stalls. Local tests cover 100, 300, 1,000 and 1,100 inputs. A live run on 300 companies from my own held-out sample (not your 300) returned {{extra_terminal}} results for {{extra_input}} inputs ({{extra_failed}} failed) in {{extra_runtime}} s, using {{extra_requests}} requests at ${{extra_cost}}. I could not find the cause of the 108-of-300 result from my side, so I am sending a short separate question about it.
+- Public website built and hosted with JBox: {{website_url}} . It covers search, company profiles, evidence receipts, comparison and methodology, with a 3D research-lens illustration that has Pause and Reset controls.
+
+What did not change: news and NAV jobs. The free GDELT news API rate-limited 11 of 12 polite test queries (HTTP 429), and the licensed feeds I found are paid. So I did not add a news source rather than loosen the fetch policy. NAV's job feed needs a registered production token, which I have not requested yet. Jobs and articles still come only from structured data on confirmed company sites, and anything not found stays "not established".
+
+Repository: https://github.com/Avi36005/signalpost (branch main)
+Exact commit: {{commit}} (the commit the smoke test ran on; later commits on main add only run reports and documentation)
+
+Install: uv sync --frozen
+Run: uv run python -m aviscope.runner --organisations BATCH_FILE --output-dir out/official --history --max-cost 0
+
+Smoke test (100 held-out companies, run {{smoke_run_id}}): {{smoke_terminal}} results for {{smoke_input}} inputs, {{smoke_failed}} failed. Verified websites: {{smoke_website_available}}. Withheld or not found: {{smoke_website_ambiguous}} ambiguous (ownership not proven on the page), {{smoke_website_blocked}} blocked, {{smoke_website_not_available}} with no candidate site found, {{smoke_website_failed}} failed. The integrity audit passed: every published claim resolves to its retained evidence. Tests: 248 passed.
+Runtime and cost: {{smoke_runtime}} s wall-clock for 100 companies, {{smoke_requests}} requests, ${{smoke_cost}} spend. No API key is needed.
+Models and APIs: no model or LLM; the Brønnøysund open APIs (NLOD 2.0) and company-owned websites. See MODELS_AND_APIS.md and SOURCE_RIGHTS.md under docs/ in the repository.
+
+Website: {{website_url}}
+JBox project evidence: docs/JBOX_BUILD_PROVENANCE.md (project https://jboxai.com/project/y06trcf4z83deprokeqgxs08/). The frontend lives in JBox rather than git. The site loads a labelled, read-only snapshot: docs/site-snapshot/2026-10-smoke-100 at commit 0ca4301b45b03f10d4d30d965808fe9f7ebc7c27, run aviscope-20261014T110930Z, 100 companies retrieved on 14 October 2026.
+
+Evidence in the repository: docs/NOV2026_CHANGE_PLAN.md (each feedback item mapped to its change, validation and rollback) and docs/smoke-test/ (the November smoke-test and 300-company reports). The revision package {{zip_name}} (SHA-256 {{zip_sha256}}) is attached.
+
+Known limitations: most small companies have no website we can prove they own. News and NAV jobs are blocked as described above. The website still shows the October snapshot, not this revision's run. The starter licence is unconfirmed. Details are in LIMITATIONS.md.
+
+Thanks,
+Avinash Gehi
+avinashgehi3@gmail.com

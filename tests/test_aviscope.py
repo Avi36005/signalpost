@@ -139,6 +139,12 @@ def test_identity_tiers(text,host,registry,accepted):
     ('https://twitter.com/intent/tweet?text=x',None),
     ('https://www.linkedin.com/in/some-person',None),
     ('https://www.instagram.com/p/Cx1/',None),
+    ('https://www.facebook.com/p/En-Forskjell-100063561234567/',{'platform':'facebook','url':'https://facebook.com/p/En-Forskjell-100063561234567'}),
+    ('https://www.facebook.com/p/Cx1/',None),
+    ('https://www.facebook.com/',None),
+    ('https://www.facebook.com/login/?next=/ambita',None),
+    ('https://www.facebook.com/dialog/share?app_id=1',None),
+    ('https://www.linkedin.com/company/',None),
 ])
 def test_social_profile_links(url,expected):
     assert social_profile(url)==expected

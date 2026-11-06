@@ -1,0 +1,18 @@
+To: submit@builderr.ai
+Subject: AviScope: JBox website for the Signalpost bonus, Avinash Gehi
+
+Hi Soham,
+
+Here is my JBox-built Signalpost website for the separate JBox bonus:
+
+{{website_url}}
+
+- It was built in JBox (account avinashgehi3@gmail.com) and published on 6 November 2026. Build provenance is in docs/JBOX_BUILD_PROVENANCE.md at https://github.com/Avi36005/signalpost.
+- It is read-only and loads a labelled research snapshot of 100 Norwegian companies produced by AviScope (run aviscope-20261014T110930Z, retrieved 14 October 2026, agent commit 62e36ccf73b744d21f781d7fb6328071aa69304e). It is not live data.
+- On a laptop or phone you can search for a company by name or organisation number, compare two companies side by side, and open the source behind each fact.
+
+This email is a website-bonus update only, not a new agent revision. Could you confirm whether it counts against my revision allowance? The agent revision for your 2 November feedback will follow separately with its exact commit.
+
+Thanks,
+Avinash Gehi
+avinashgehi3@gmail.com
