@@ -107,4 +107,4 @@ Refresh is unchanged. `--previous` compares material changes, and missing record
 - accepts `--extra-report` for the 300-company report;
 - names the ZIP `AviScope_Avinash_Signalpost_<date>_<sha8>.zip`.
 
-The secret scan now matches token prefixes only at a token boundary. The first November package was refused because a retained image URL (`…nordisk-eik-…`) matched the old unanchored `sk-` pattern. Real key shapes are still refused (`tests/test_package_secrets.py`). The source, report, code-hash and integrity checks are unchanged.
+The secret scan now matches token prefixes only at a token boundary. The first November package was refused because a retained image URL (`…nordisk-eik-…`) matched the old unanchored `sk-` pattern. Real key shapes are still refused (`tests/test_package_secrets.py`). The packager also refuses any file containing the local checkout path. The runner now records only the interpreter's file name in `run-report.json` `command`, not its full path. The source, report, code-hash and integrity checks are unchanged.

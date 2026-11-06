@@ -17,3 +17,10 @@ def test_secret_scan_ignores_words_ending_in_sk_or_gh():
     for sample in (b'/uploads/Rival-Country-02.nordisk-eik-' + b'l' * 40 + b'.png',
                    b'risk-assessment-' + b'z' * 40, b'high_' + b'q' * 36):
         assert not SECRET.search(sample), sample
+
+
+def test_local_checkout_path_is_refused_in_package_files(tmp_path):
+    root = tmp_path / 'my checkout'
+    assert package_submission.local_path_in(('{"command": ["' + str(root) + '/.venv/python"]}').encode(), root)
+    assert package_submission.local_path_in(('"' + __import__('json').dumps(str(root))[1:-1] + '"').encode(), root)
+    assert not package_submission.local_path_in(b'{"command": ["python.exe", "-m", "aviscope.runner"]}', root)

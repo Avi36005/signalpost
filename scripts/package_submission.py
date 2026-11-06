@@ -15,6 +15,10 @@ import tempfile
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
+
+def local_path_in(data,root=ROOT):
+    forms={str(root),root.as_posix(),json.dumps(str(root))[1:-1]}
+    return any(f.encode('utf-8') in data for f in forms if len(f)>3)
 sys.path.insert(0,str(ROOT))
 from aviscope.audit import audit
 from aviscope.runner import code_hash,file_hash,read_jsonl,write_json,write_jsonl
@@ -168,7 +172,9 @@ def package(data_dir,live_report,extra_reports=None):
         (base/'email'/path.name).write_text(fill(path,{'zip_sha256':'in the separate '+stem+'.zip.sha256 file'}),encoding='utf-8')
     payload=[p for p in base.rglob('*') if p.is_file()]
     for path in payload:
-        if SECRET.search(path.read_bytes()):raise ValueError('Potential secret pattern: '+str(path.relative_to(base)))
+        data=path.read_bytes()
+        if SECRET.search(data):raise ValueError('Potential secret pattern: '+str(path.relative_to(base)))
+        if local_path_in(data):raise ValueError('Local checkout path in '+str(path.relative_to(base)))
     (base/'SHA256SUMS.txt').write_text(''.join(file_hash(p)+'  '+p.relative_to(base).as_posix()+'\n' for p in sorted(payload)),encoding='utf-8')
     archive=dist/(stem+'.zip')
     with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
