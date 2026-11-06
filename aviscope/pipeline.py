@@ -207,6 +207,14 @@ def enrich(p, broker, policy='gap', history=False, guess=True):
                 if page['status'] == 200 and urlsplit(page['final_url']).hostname == crawl_host:
                     parsed = html_document(content, page['final_url'])
                     proof = identity_gate(p['organisation_number'], p['name'], parsed, registry_linked=True, host=crawl_host)
+                    foreign = not proof['legal_name_present'] and not proof['organisation_number_present'] and other_legal_names(parsed['text'], p['name'])
+                    if foreign:
+                        # A same-host page that names another legal entity (a sibling, parent or
+                        # agency) does not inherit the host's ownership proof.
+                        decision['outcome'] = 'withheld: page names a different legal entity'
+                        decision['new_supported_claims'] = 0
+                        p['decisions'].append(decision)
+                        continue
                     if not proof['publishable'] and not proof['other_organisation_numbers'] and proof['reason'] != 'Parked domain':
                         # Same verified host: the page inherits host-level ownership, not page-level proof.
                         proof = {**assessment, 'reason': 'Page on verified company host (' + assessment['reason'] + ')', 'locator': assessment['locator']}

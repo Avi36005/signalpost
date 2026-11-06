@@ -74,9 +74,18 @@ class Budget:
     def remaining_seconds(self):
         return max(0, self.max_seconds - (time.monotonic() - self.started))
 
+    def _exhausted(self, worst_case_cost=0.0):
+        return self.requests >= self.max_requests or self.remaining_seconds() <= 1 or self.bytes >= self.max_bytes or self.cost + worst_case_cost > self.max_cost
+
+    def check(self, worst_case_cost=0.0):
+        """Raise, without consuming anything, when no further request could be reserved."""
+        with self.lock:
+            if self._exhausted(worst_case_cost):
+                raise BudgetExceeded('Batch request, deadline, byte or cost limit reached')
+
     def reserve(self, worst_case_cost=0.0):
         with self.lock:
-            if self.requests >= self.max_requests or self.remaining_seconds() <= 1 or self.bytes >= self.max_bytes or self.cost + worst_case_cost > self.max_cost:
+            if self._exhausted(worst_case_cost):
                 raise BudgetExceeded('Batch request, deadline, byte or cost limit reached')
             self.requests += 1
             self.cost += worst_case_cost
@@ -207,6 +216,9 @@ class Broker:
             for attempt in range(2):
                 filing_copy = '/aarsregnskap/kopi/' in url
                 interval = 2.1 if filing_copy else .18 if source_class == 'official_registry' else 1.0
+                # An exhausted budget fails fast: it must not book (and sleep through) a polite-host slot
+                # that a real request elsewhere could have used.
+                self.budget.check()
                 # The rate-limited filing-copy route has its own schedule so it never delays identity reads.
                 self._throttle(host + '#filing-copy' if filing_copy else host, interval)
                 self.budget.reserve()

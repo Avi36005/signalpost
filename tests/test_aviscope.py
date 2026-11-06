@@ -118,7 +118,8 @@ def test_scrambled_number_is_not_a_number_match():
 
 
 @pytest.mark.parametrize('text,host,registry,accepted',[
-    ('Velkommen',          'www.ambita.no',  True,  True),   # registry-declared domain spelling the legal name
+    ('Velkommen',          'www.ambita.no',  True,  False),  # Nov 2026: registry-declared name-shaped host alone is not proof
+    ('Velkommen hos Ambita AS', 'www.ambita.no', True, True),  # page names the exact legal entity
     ('Velkommen',          'www.ambita.no',  False, False),  # guessed domain needs on-page proof
     ('Org.nr 945 811 714', 'www.ambita.no',  False, True),
     ('AMBITA AS',          'www.ambita.no',  False, True),   # exact legal name on a domain spelling it

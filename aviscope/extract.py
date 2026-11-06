@@ -251,10 +251,11 @@ def identity_gate(org, legal_name, document, *, registry_linked=False, host=None
     """Exact-entity gate. Tiers, strongest first:
     1. the target organisation number on the page (any candidate source);
     2. a registry-declared homepage that shows the exact legal name;
-    3. a registry-declared homepage whose own domain spells the exact legal name.
-    A guessed (non-registry) domain needs tier 1, or the exact legal name together with a
-    name-spelling domain. Any other checksum-valid organisation number, a parked page or a
-    known shared portal keeps the candidate ambiguous."""
+    3. a guessed domain spelling the legal name whose page also shows the exact legal name.
+    Every tier needs fetched page content naming the company or its number (Nov 2026 rule): a
+    registry-listed, name-shaped host alone is a ranking hint, never ownership proof. Any other
+    checksum-valid organisation number, a parked page or a known shared portal keeps the
+    candidate ambiguous."""
     text = document['text']
     # Match separate digits with limited separators, never concatenated unrelated numbers.
     pattern = r'(?<!\d)' + r'[ .\u00a0-]?'.join(org) + r'(?!\d)'
@@ -279,12 +280,12 @@ def identity_gate(org, legal_name, document, *, registry_linked=False, host=None
         locator, basis = f'text:{match.start()}:{match.end()}', ('Registry-listed domain; exact organisation number on page' if registry_linked else 'Exact organisation number on a domain spelling the legal name' if domain_match else 'Exact organisation number and legal name on candidate page')
     elif registry_linked and name_match and not name_only_risky:
         locator, basis = f'text:{name_at}:{name_at + len(legal)}', 'Registry-listed domain; exact legal name on page'
-    elif registry_linked and domain_match:
-        locator, basis = 'host:' + host, 'Registry-listed domain spells the exact legal name'
     elif domain_match and name_match and not name_only_risky:
         locator, basis = f'text:{name_at}:{name_at + len(legal)}', 'Domain spells the exact legal name and page shows the exact legal name'
     accepted = bool(basis) and not other and not parked and not shared
     reason = basis if accepted else 'Insufficient exact-entity ownership evidence'
+    if not accepted and not match and not name_match and domain_match:
+        reason = 'Domain spells the legal name but the page shows neither the exact legal name nor the organisation number'
     if other: reason = 'Multiple company identifiers: shared/group ownership requires review'
     if shared: reason = 'Shared portal or platform domain; not exclusively owned by this entity'
     if parked: reason = 'Parked domain'
@@ -518,6 +519,77 @@ def _money(value, currency):
     return f'{currency or ""} {sign}{text}'.strip()
 
 
+def _period_months(period):
+    try:
+        start = datetime.fromisoformat(str(period['fraDato'])[:10])
+        end = datetime.fromisoformat(str(period['tilDato'])[:10])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (end.year - start.year) * 12 + end.month - start.month + (1 if end.day >= start.day - 1 else 0)
+
+
+def revenue_comparison(claims):
+    """Latest legal-entity revenue against the immediately preceding comparable annual period.
+    Inputs are existing supported claims only; nothing is fetched or recalculated differently.
+    Returns None when there is no latest revenue, else a dict describing the comparison or why
+    no conventional comparison is available."""
+    pool = [c for c in claims if c['field'] == 'revenue' and c['scope'] == 'legal_entity' and c['availability'] == 'available'
+            and not c['stale'] and isinstance(c['value'], (int, float)) and not isinstance(c['value'], bool) and (c.get('period') or {}).get('tilDato')]
+    if not pool:
+        return None
+    by_end = {}
+    for c in sorted(pool, key=lambda c: c['period']['tilDato'], reverse=True):
+        by_end.setdefault(c['period']['tilDato'], c)
+    ordered = list(by_end.values())
+    latest = ordered[0]
+    out = {'latest_claim_id': latest['id'], 'latest_value': latest['value'], 'currency': latest.get('currency'), 'original_unit': latest.get('original_unit'),
+           'latest_period': latest['period'], 'latest_year': latest['period']['tilDato'][:4], 'previous_claim_id': None, 'status': 'no_prior_record'}
+    months = _period_months(latest['period'])
+    if months is not None and months < 11:
+        out['status'] = 'latest_period_short'
+        out['reason'] = f'The latest filed accounts cover a {months}-month period; they are not compared with a full year or annualised'
+        return out
+    latest_start = str(latest['period'].get('fraDato') or latest['period']['tilDato'])[:10]
+    for c in ordered[1:]:
+        if c['period']['tilDato'][:10] >= latest_start:
+            continue  # overlapping or amended period
+        if c.get('currency') != latest.get('currency') or c.get('original_unit') != latest.get('original_unit'):
+            out.update(status='not_comparable', reason='The preceding record uses a different currency or unit')
+            return out
+        prev_months = _period_months(c['period'])
+        if prev_months is not None and prev_months < 11:
+            out.update(status='not_comparable', reason=f'The preceding filed period covers only {prev_months} months')
+            return out
+        previous, change = c['value'], latest['value'] - c['value']
+        out.update(previous_claim_id=c['id'], previous_value=previous, previous_period=c['period'], previous_year=c['period']['tilDato'][:4],
+                   absolute_change=change, consecutive=int(out['latest_year']) - int(c['period']['tilDato'][:4]) == 1,
+                   derivation='absolute_change = latest_revenue - previous_revenue; percent_change = absolute_change / previous_revenue * 100 (only when previous_revenue > 0)')
+        if previous > 0:
+            out.update(status='compared', percent_change=round(change / previous * 100, 1))
+        else:
+            out.update(status='compared_without_percentage', percent_change=None,
+                       reason='The preceding revenue was zero' if previous == 0 else 'The preceding revenue was negative')
+        return out
+    out['reason'] = 'No earlier full-year legal-entity revenue record is available'
+    return out
+
+
+def revenue_sentence(cmp):
+    cur = cmp.get('currency')
+    latest = f'Revenue was {_money(cmp["latest_value"], cur)} in {cmp["latest_year"]}'
+    if cmp['status'] in ('compared', 'compared_without_percentage'):
+        change = cmp['absolute_change']
+        movement = 'no change' if change == 0 else f'{"an increase" if change > 0 else "a decrease"} of {_money(abs(change), cur)}'
+        pct = '' if change == 0 else f' ({abs(cmp["percent_change"]):.1f}%)' if cmp.get('percent_change') is not None else f'; a percentage change is not meaningful because {cmp["reason"][0].lower() + cmp["reason"][1:]}'
+        if not cmp['consecutive']:
+            return f'{latest}, compared with {_money(cmp["previous_value"], cur)} in the available {cmp["previous_year"]} record: {movement}{pct}.'
+        if change == 0:
+            return f'{latest}, unchanged from {cmp["previous_year"]}.'
+        return f'{latest}, {"up" if change > 0 else "down"} from {_money(cmp["previous_value"], cur)} in {cmp["previous_year"]}, {movement}{pct}.'
+    reason = cmp.get('reason') or 'no earlier comparable record is available'
+    return f'{latest}. No prior-year comparison is shown: {reason[0].lower() + reason[1:]}.'
+
+
 def summarize(p):
     """Deterministic, cited narrative. Every sentence lists the claim ids it rests on; nothing is
     inferred beyond the supported, undisputed, current legal-entity claims."""
@@ -552,10 +624,18 @@ def summarize(p):
     if description:
         say(f'Its own website describes it as: "{str(description["value"]).strip()[:300]}"', description)
     revenue, result, employees = first('revenue'), first('annual_result'), first('employees')
-    if revenue or result:
-        period = ((revenue or result).get('period') or {}).get('tilDato', '')[:4]
-        parts = ([f'revenue of {_money(revenue["value"], revenue.get("currency"))}'] if revenue else []) + ([f'an annual result of {_money(result["value"], result.get("currency"))}'] if result else [])
-        say(f'Latest filed legal-entity accounts{" for " + period if period else ""} show ' + ' and '.join(parts) + '.', revenue, result)
+    comparison = revenue_comparison(entity)
+    if comparison:
+        by_id = {c['id']: c for c in entity}
+        say(revenue_sentence(comparison), by_id.get(comparison['latest_claim_id']), by_id.get(comparison.get('previous_claim_id')))
+        if comparison.get('previous_claim_id'):
+            facts.append({'field': 'revenue_change', 'value': {k: comparison.get(k) for k in ('latest_year', 'previous_year', 'latest_value', 'previous_value', 'absolute_change', 'percent_change', 'consecutive', 'status')},
+                          'currency': comparison.get('currency'), 'scope': 'legal_entity', 'claim_id': comparison['latest_claim_id'], 'derived_from': [comparison['latest_claim_id'], comparison['previous_claim_id']], 'derivation': comparison['derivation']})
+    if result:
+        # The annual result is reported for its own period; never put it under another period's year label.
+        same = bool(comparison) and comparison['latest_period'] == (result.get('period') or {})
+        year = (result.get('period') or {}).get('tilDato', '')[:4]
+        say(f'The annual result for {"the same year" if same else year or "the latest filed period"} was {_money(result["value"], result.get("currency"))}.', result)
     if employees:
         say(f'The registry lists {employees["value"]} employees.', employees)
     if first('bankrupt') and first('bankrupt')['value'] is True:
@@ -584,4 +664,4 @@ def summarize(p):
     unknowns = [k for k, v in p['availability'].items() if v['state'] != 'available']
     if unknowns:
         narrative.append({'text': 'Not established from permitted exact-entity sources: ' + ', '.join(u.replace('_', ' ') for u in unknowns) + '. This is not proof of absence.', 'claim_ids': []})
-    p['summary'] = {'title': name, 'narrative': narrative, 'facts': facts, 'unknowns': unknowns, 'changes_observed': len(p['changes']), 'method': 'Deterministic template over supported, undisputed claims; each sentence cites its claim ids; no model used'}
+    p['summary'] = {'title': name, 'narrative': narrative, 'facts': facts, 'unknowns': unknowns, 'changes_observed': len(p['changes']), 'revenue_comparison': comparison, 'method': 'Deterministic template over supported, undisputed claims; each sentence cites its claim ids; no model used'}

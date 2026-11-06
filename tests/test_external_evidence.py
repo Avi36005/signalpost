@@ -132,13 +132,25 @@ def test_verified_site_profiles_brand_jobs_articles_are_audited(tmp_path):
     assert not audit(tmp_path)['passed']
 
 
-def test_registry_domain_spelling_name_is_audited(tmp_path):
-    pages = {'https://www.ambita.no/': '<h1>Velkommen</h1>'}
+def test_registry_domain_spelling_name_without_page_proof_is_withheld(tmp_path):
+    # Intentional Nov 2026 requirement change (organiser feedback, 2 Nov): a registry-listed domain
+    # that merely spells the legal name is no longer ownership proof. The page itself must show the
+    # company's exact legal name or organisation number. This replaces the old host-only acceptance.
     p = make_profile(); p['candidate_ledger'] = [{'url': 'www.ambita.no', 'source': 'official_registry', 'status': 'not_attempted'}]
-    p = finish(enrich(p, broker_for(tmp_path, {'https://www.ambita.no/': pages['https://www.ambita.no/']})))
+    p = finish(enrich(p, broker_for(tmp_path, {'https://www.ambita.no/': '<h1>Velkommen</h1>'})))
+    assert not [c for c in p['claims'] if c['field'] == 'official_website']
+    assert p['availability']['website']['state'] == 'ambiguous'
+    assert 'neither the exact legal name nor the organisation number' in p['candidate_ledger'][0]['reason']
+    assert not any(e['locator'].startswith('host:') for e in p['evidence'])
+
+
+def test_registry_domain_with_footer_identity_is_published_and_audited(tmp_path):
+    home = '<h1>Velkommen</h1><footer>© 2026 Ambita AS · Org.nr. 945 811 714</footer>'
+    p = make_profile(); p['candidate_ledger'] = [{'url': 'www.ambita.no', 'source': 'official_registry', 'status': 'not_attempted'}]
+    p = finish(enrich(p, broker_for(tmp_path, {'https://www.ambita.no/': home})))
     website = [c for c in p['claims'] if c['field'] == 'official_website']
     assert [c['value'] for c in website] == ['https://www.ambita.no/']
-    assert p['evidence'][0]['locator'] == 'host:www.ambita.no'
+    assert p['evidence'][0]['locator'].startswith('text:')
     write_jsonl(tmp_path/'profiles.jsonl', [p])
     write_jsonl(tmp_path/'envelopes.jsonl', [envelope(p, 'test', p['researched_at'])])
     write_jsonl(tmp_path/'entry-companies.jsonl', [{'organisation_number': ORG}])
@@ -266,3 +278,34 @@ def test_summary_facts_cover_web_hiring_and_activity(tmp_path):
     assert {'official_website', 'company_description', 'job_posting', 'company_article', 'linked_profile'} <= facts
     ids = {c['id'] for c in p['claims']}
     assert all(f['claim_id'] in ids and f['scope'] == 'legal_entity' for f in p['summary']['facts'])
+
+
+@pytest.mark.parametrize('home', [
+    # Parent/group homepage mentioning the subsidiary in a portfolio list.
+    '<h1>Konsernet</h1><p>Våre selskaper: Ambita AS, Norkart AS, Infoland AS</p><p>Parent Holding AS</p>',
+    # Customer/reference list naming the target among others.
+    '<h1>Referanser</h1><p>Våre kunder: Ambita AS og Eksempel AS</p>',
+    # Parent footer with a different checksum-valid number.
+    '<p>Ambita AS er en del av Parent Holding AS, org.nr 917 886 113</p>',
+])
+def test_parent_group_and_client_list_pages_are_withheld(tmp_path, home):
+    p = make_profile(); p['candidate_ledger'] = [{'url': 'www.ambita.no', 'source': 'official_registry', 'status': 'not_attempted'}]
+    p = finish(enrich(p, broker_for(tmp_path, {'https://www.ambita.no/': home}), guess=False))
+    assert not [c for c in p['claims'] if c['field'] == 'official_website'], home
+
+
+def test_name_spelled_guess_without_page_identity_is_withheld():
+    assert not identity_gate(ORG, 'AMBITA AS', {'text': 'Velkommen'}, host='ambita.no')['publishable']
+    assert not identity_gate(ORG, 'AMBITA AS', {'text': 'Velkommen'}, registry_linked=True, host='ambita.no')['publishable']
+    assert identity_gate(ORG, 'AMBITA AS', {'text': 'Kontakt Ambita AS'}, registry_linked=True, host='ambita.no')['publishable']
+    assert identity_gate(ORG, 'AMBITA AS', {'text': 'Org.nr 945811714'}, registry_linked=True, host='portal.example')['publishable']
+
+
+def test_sibling_page_on_verified_host_does_not_inherit_ownership(tmp_path):
+    home = '<p>AMBITA AS 945811714</p><a href="/nyheter">Nyheter</a><a href="https://www.instagram.com/ambita/">I</a>'
+    sibling = ('<h1>Nyheter fra Norkart AS</h1><a href="https://www.facebook.com/ambita.sibling/">F</a>'
+               '<script type="application/ld+json">' + json.dumps({'@type': 'NewsArticle', 'headline': 'Sibling news', 'datePublished': '2026-09-30'}) + '</script>')
+    p = finish(enrich(make_profile(), broker_for(tmp_path, {'https://example.com/': home, 'https://example.com/nyheter': sibling})))
+    assert not [c for c in p['claims'] if c['field'] == 'company_article']
+    assert [c['value']['url'] for c in p['claims'] if c['field'] == 'linked_profile'] == ['https://instagram.com/ambita']
+    assert any('different legal entity' in str(d.get('outcome')) for d in p['decisions'])

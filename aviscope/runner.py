@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -258,22 +258,50 @@ def _run(args, orgs, out, on_progress):
             profile['errors'].append({'module': 'runner', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
         return profile
 
+    # Deadline-safe completion. Network work stops `margin` seconds before the wall-clock ceiling;
+    # result collection stops shortly after, so every input still gets a terminal record and the
+    # files are flushed before an external evaluator timeout. A cancelled Python future does not
+    # stop its thread, so collection never waits on workers past the deadline.
+    total_seconds = budget.max_seconds
+    margin = min(120.0, max(2.0, .04 * total_seconds))
+    budget.max_seconds = max(.001, total_seconds - margin)
+    collect_until = budget.started + max(.001, total_seconds - margin / 2)
+    def remaining():
+        return max(0.0, collect_until - time.monotonic())
+    partial = out/'envelopes.partial.jsonl'
+    partial_lock = threading.Lock()
+    def record_terminal(org):
+        # Incremental, append-only record: survives an external kill. Final files are rewritten atomically.
+        with partial_lock, partial.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(envelope(state[org], run_id, started_at), ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n')
+    def finish_safely(org, profile):
+        try:
+            return finish(profile, previous.get(org))
+        except Exception as exc:
+            fallback = Profile(organisation_number=org).model_dump(mode='json')
+            fallback['errors'].append({'module': 'finish', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
+            for family in fallback['availability'].values():
+                family.update(state='failed', reason='Profile could not be validated; no claims published')
+            return finish(fallback)
+    deadline_events = {'baseline_unfinished': 0, 'enrichment_unfinished': 0}
+    official_pool = ThreadPoolExecutor(max_workers=args.workers)
+    web_pool = ThreadPoolExecutor(max_workers=getattr(args, 'enrich_workers', 24))
     try:
         # Every company's official baseline is scheduled first, at the registry's polite rate.
         # Website research starts per company as soon as its baseline lands; it uses other hosts,
         # so it overlaps with, rather than delays, the remaining official reads.
-        with ThreadPoolExecutor(max_workers=args.workers) as official_pool, ThreadPoolExecutor(max_workers=getattr(args, 'enrich_workers', 24)) as web_pool:
-            enrich_tasks = {}
+        enrich_tasks = {}
 
-            def start_enrichment(org):
-                # A private copy: checkpoints serialise `state` while enrichment is still running.
-                enrich_tasks[web_pool.submit(enrich, copy.deepcopy(state[org]), broker, args.routing, args.history, guess)] = org
+        def start_enrichment(org):
+            # A private copy: checkpoints serialise `state` while enrichment is still running.
+            enrich_tasks[web_pool.submit(enrich, copy.deepcopy(state[org]), broker, args.routing, args.history, guess)] = org
 
-            for org in orgs:
-                if org in baseline_done and org not in done:
-                    start_enrichment(org)
-            tasks = {official_pool.submit(baseline, org, broker, frozen.get(org, False) if args.bulk else None): org for org in orgs if org not in baseline_done}
-            for future in as_completed(tasks):
+        for org in orgs:
+            if org in baseline_done and org not in done:
+                start_enrichment(org)
+        tasks = {official_pool.submit(baseline, org, broker, frozen.get(org, False) if args.bulk else None): org for org in orgs if org not in baseline_done}
+        try:
+            for future in as_completed(tasks, timeout=remaining()):
                 org = tasks[future]
                 state[org] = baseline_result(org, future)
                 with save_lock:
@@ -281,14 +309,40 @@ def _run(args, orgs, out, on_progress):
                 start_enrichment(org)
                 if len(baseline_done) % 25 == 0 or len(baseline_done) == len(orgs):
                     with save_lock: save('official_baseline')
-            for future in as_completed(list(enrich_tasks)):
+        except FuturesTimeout:
+            pass
+        for org in orgs:
+            if org not in baseline_done:
+                # Truthful terminal state: the official baseline did not finish before the deadline.
+                deadline_events['baseline_unfinished'] += 1
+                profile = Profile(organisation_number=org).model_dump(mode='json')
+                profile['errors'].append({'module': 'runner', 'reason': 'Run deadline reached before the official baseline completed; not researched'})
+                for family in profile['availability'].values():
+                    family.update(state='failed', reason='Run deadline reached before research completed')
+                state[org] = finish_safely(org, profile); done.add(org); record_terminal(org)
+        try:
+            for future in as_completed(list(enrich_tasks), timeout=remaining()):
                 org = enrich_tasks[future]
                 try: state[org] = future.result()
                 except Exception as exc: state[org]['errors'].append({'module': 'enrichment', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]})
-                state[org] = finish(state[org], previous.get(org)); done.add(org)
+                state[org] = finish_safely(org, state[org]); done.add(org); record_terminal(org)
                 if len(done) % 25 == 0 or len(done) == len(orgs):
                     with save_lock: save('enrichment')
+        except FuturesTimeout:
+            pass
+        for org in orgs:
+            if org not in done:
+                # Official baseline is kept; optional website research did not finish in time.
+                deadline_events['enrichment_unfinished'] += 1
+                profile = state[org]
+                profile['errors'].append({'module': 'enrichment', 'reason': 'Run deadline reached before website research completed; official baseline retained'})
+                for family in ('website', 'company_profiles', 'jobs', 'public_activity', 'brand'):
+                    if profile['availability'][family]['state'] != 'available':
+                        profile['availability'][family].update(state='failed', reason='Run deadline reached before this family was researched; not proof of absence')
+                state[org] = finish_safely(org, profile); done.add(org); record_terminal(org)
     finally:
+        official_pool.shutdown(wait=False, cancel_futures=True)
+        web_pool.shutdown(wait=False, cancel_futures=True)
         stop.set(); monitor_thread.join(timeout=1)
     profiles = [state[org] for org in orgs]
     envelopes = [envelope(p, run_id, started_at) for p in profiles]
@@ -303,7 +357,7 @@ def _run(args, orgs, out, on_progress):
     researched = sum(bool(p['name'] and any(not c['stale'] for c in p['claims'])) for p in profiles)
     fully_covered = sum(all(v['state'] == 'available' for v in p['availability'].values()) for p in profiles)
     disk = sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
-    report = {'schema_version': 'aviscope-run-1', 'run_id': run_id, 'source_commit': source_version(), 'source_code_sha256': code_hash(), 'dependency_lock_sha256': file_hash(ROOT/'uv.lock'), 'input_sha256': file_hash(args.organisations), 'started_at': started_at, 'completed_at': now(), 'cutoff': cutoff.isoformat(), 'command': [sys.executable, '-m', 'aviscope.runner', *sys.argv[1:]], 'settings': settings, 'environment': {'python': platform.python_version(), 'platform': platform.platform(), 'workers': args.workers, 'enrich_workers': getattr(args, 'enrich_workers', 24), 'guess_domains': guess}, 'input_count': len(orgs), 'terminal_count': len(envelopes), 'unique_profiles': len(profiles), 'researched_profiles': researched, 'partial_profiles': researched-fully_covered, 'all_families_available_profiles': fully_covered, 'failed_inputs': len(orgs)-researched, 'supported_claims': sum(len(p['claims']) for p in profiles), 'fresh_claims': sum(sum(not c['stale'] for c in p['claims']) for p in profiles), 'operations': {**budget.metrics(), 'runtime_seconds': round(runtime, 3), 'peak_memory_bytes': peak, 'temporary_disk_bytes': disk, 'p50_company_seconds': timings[len(timings)//2] if timings else None, 'p95_company_seconds': timings[min(len(timings)-1, int(len(timings)*.95))] if timings else None}, 'field_coverage': {f: sum(p['availability'][f]['state'] == 'available' for p in profiles) for f in profiles[0]['availability']} if profiles else {}, 'validation': {'exact_cardinality': len(envelopes) == len(orgs), 'unique_association': [e['organisation_number'] for e in envelopes] == orgs, 'schema_validated': True}, 'quality_metrics': {'official_score': None, 'official_qualification': 'not_determined', 'external_exact_entity_precision': None, 'weighted_external_recall': None, 'independent_review': 'pending'}, 'budget_checks': {'requests': budget.requests <= args.max_requests, 'wall_time': runtime <= args.max_seconds + 10, 'memory': peak <= 16_000_000_000, 'temporary_disk': disk <= 10_000_000_000, 'cost': budget.cost <= args.max_cost}, 'snapshot_mode': 'evaluator_supplied' if args.bulk else 'live_development_registry', 'setup_downloads_included': False, 'setup_accounting': 'Requirements, universe and dependency downloads are separately recorded setup; no external company response cache loaded'}
+    report = {'schema_version': 'aviscope-run-1', 'run_id': run_id, 'source_commit': source_version(), 'source_code_sha256': code_hash(), 'dependency_lock_sha256': file_hash(ROOT/'uv.lock'), 'input_sha256': file_hash(args.organisations), 'started_at': started_at, 'completed_at': now(), 'cutoff': cutoff.isoformat(), 'command': [sys.executable, '-m', 'aviscope.runner', *sys.argv[1:]], 'settings': settings, 'environment': {'python': platform.python_version(), 'platform': platform.platform(), 'workers': args.workers, 'enrich_workers': getattr(args, 'enrich_workers', 24), 'guess_domains': guess}, 'input_count': len(orgs), 'terminal_count': len(envelopes), 'deadline': {'flush_margin_seconds': round(margin, 3), **deadline_events}, 'unique_profiles': len(profiles), 'researched_profiles': researched, 'partial_profiles': researched-fully_covered, 'all_families_available_profiles': fully_covered, 'failed_inputs': len(orgs)-researched, 'supported_claims': sum(len(p['claims']) for p in profiles), 'fresh_claims': sum(sum(not c['stale'] for c in p['claims']) for p in profiles), 'operations': {**budget.metrics(), 'runtime_seconds': round(runtime, 3), 'peak_memory_bytes': peak, 'temporary_disk_bytes': disk, 'p50_company_seconds': timings[len(timings)//2] if timings else None, 'p95_company_seconds': timings[min(len(timings)-1, int(len(timings)*.95))] if timings else None}, 'field_coverage': {f: sum(p['availability'][f]['state'] == 'available' for p in profiles) for f in profiles[0]['availability']} if profiles else {}, 'validation': {'exact_cardinality': len(envelopes) == len(orgs), 'unique_association': [e['organisation_number'] for e in envelopes] == orgs, 'schema_validated': True}, 'quality_metrics': {'official_score': None, 'official_qualification': 'not_determined', 'external_exact_entity_precision': None, 'weighted_external_recall': None, 'independent_review': 'pending'}, 'budget_checks': {'requests': budget.requests <= args.max_requests, 'wall_time': runtime <= args.max_seconds + 10, 'memory': peak <= 16_000_000_000, 'temporary_disk': disk <= 10_000_000_000, 'cost': budget.cost <= args.max_cost}, 'snapshot_mode': 'evaluator_supplied' if args.bulk else 'live_development_registry', 'setup_downloads_included': False, 'setup_accounting': 'Requirements, universe and dependency downloads are separately recorded setup; no external company response cache loaded'}
     write_json(out/'run-report.json', report); save('completed')
     return report
 
@@ -315,6 +369,13 @@ def main():
     except (ValueError, FileExistsError) as exc:
         raise SystemExit(str(exc))
     print(json.dumps({k: report[k] for k in ('run_id', 'input_count', 'researched_profiles', 'partial_profiles', 'failed_inputs', 'operations', 'validation')}, indent=2))
+    sys.stdout.flush()
+    # Outputs are already flushed atomically. Worker threads still blocked in a network call past the
+    # deadline must not hold the process open (the interpreter joins executor threads at exit).
+    lingering = [t for t in threading.enumerate() if t is not threading.main_thread() and not t.daemon and t.is_alive()]
+    if lingering:
+        for t in lingering: t.join(timeout=max(0.0, 2.0 / len(lingering)))
+        if any(t.is_alive() for t in lingering): os._exit(0)
 
 
 if __name__ == '__main__': main()
