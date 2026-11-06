@@ -20,7 +20,7 @@ Exact commit: {{commit}} (the commit the smoke test ran on; later commits on mai
 Install: uv sync --frozen
 Run: uv run python -m aviscope.runner --organisations BATCH_FILE --output-dir out/official --history --max-cost 0
 
-Smoke test (100 held-out companies, run {{smoke_run_id}}): {{smoke_terminal}} results for {{smoke_input}} inputs, {{smoke_failed}} failed. Verified websites: {{smoke_website_available}}. Withheld or not found: {{smoke_website_ambiguous}} ambiguous (ownership not proven on the page), {{smoke_website_blocked}} blocked, {{smoke_website_not_available}} with no candidate site found, {{smoke_website_failed}} failed. The integrity audit passed: every published claim resolves to its retained evidence. Tests: 248 passed.
+Smoke test (100 held-out companies, run {{smoke_run_id}}): {{smoke_terminal}} results for {{smoke_input}} inputs, {{smoke_failed}} failed. Verified websites: {{smoke_website_available}}. Withheld or not found: {{smoke_website_ambiguous}} ambiguous (ownership not proven on the page), {{smoke_website_blocked}} blocked, {{smoke_website_not_available}} with no candidate site found, {{smoke_website_failed}} failed. The integrity audit passed: every published claim resolves to its retained evidence. Tests: 250 passed.
 Runtime and cost: {{smoke_runtime}} s wall-clock for 100 companies, {{smoke_requests}} requests, ${{smoke_cost}} spend. No API key is needed.
 Models and APIs: no model or LLM; the Brønnøysund open APIs (NLOD 2.0) and company-owned websites. See MODELS_AND_APIS.md and SOURCE_RIGHTS.md under docs/ in the repository.
 

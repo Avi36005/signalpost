@@ -19,7 +19,8 @@ sys.path.insert(0,str(ROOT))
 from aviscope.audit import audit
 from aviscope.runner import code_hash,file_hash,read_jsonl,write_json,write_jsonl
 
-SECRET=re.compile(rb'(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|sk-[A-Za-z0-9_-]{35,})')
+# Token prefixes must start a token: retained page text such as 'nordisk-eik-...' is not a key.
+SECRET=re.compile(rb'(?:-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{30,}|(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{40,}|(?<![A-Za-z0-9-])sk-[A-Za-z0-9_-]{35,})')
 
 
 WEBSITE_URL='https://build-the-actual-working-website-now-do.sites.jboxai.com/'
