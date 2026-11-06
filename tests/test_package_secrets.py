@@ -9,7 +9,7 @@ SECRET = package_submission.SECRET
 
 def test_secret_scan_flags_real_token_shapes():
     for sample in (b'key=sk-' + b'A' * 40, b'"sk-proj-' + b'x' * 40 + b'"', b' ghp_' + b'a' * 36,
-                   b'github_pat_' + b'b' * 45, b'-----BEGIN PRIVATE KEY-----'):
+                   b'github_pat_' + b'b' * 45, b'-----BEGIN ' + b'PRIVATE KEY-----'):
         assert SECRET.search(sample), sample
 
 
