@@ -1,1 +1,30 @@
-{"submitted_versions": [], "email_sent": false, "official_qualification": "not_determined"}
+{
+  "submitted_versions": [
+    {
+      "commit": "5b7cde7",
+      "recorded_by_organiser": "Soham's reply of 23 Oct 2026: 'current version on record: commit 5b7cde7 (version 1 of 5)'",
+      "source": "organiser email"
+    },
+    {
+      "commit": "c39fb1e97962ef77d22eba133c5762a91966c210",
+      "sent_at": "2026-11-06T13:03:40Z",
+      "to": "submit@builderr.ai",
+      "from": "avinashgehi3@gmail.com",
+      "subject": "AviScope: Signalpost revision and JBox website, Avinash Gehi, c39fb1e9",
+      "gmail_message_id": "1a1b0f52ecf68e82",
+      "website_url": "https://build-the-actual-working-website-now-do.sites.jboxai.com/",
+      "smoke_run_id": "aviscope-20261106T124719Z",
+      "attachment": "none (the package was built locally, not attached)",
+      "organiser_version_number": "not yet confirmed"
+    }
+  ],
+  "related_messages": [
+    {
+      "subject": "AviScope: question about the 108-of-300 run, Avinash Gehi",
+      "sent_at": "2026-11-06T13:03:55Z",
+      "gmail_message_id": "1a1b0f567852b3c0"
+    }
+  ],
+  "email_sent": true,
+  "official_qualification": "not_determined"
+}
