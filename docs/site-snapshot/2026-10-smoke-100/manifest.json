@@ -1,0 +1,28 @@
+{
+  "schema_version": "aviscope-site-snapshot-1",
+  "label": "AviScope research snapshot — 100 Norwegian companies, October 2026",
+  "mode": "research_snapshot",
+  "description": "A labelled sample of real AviScope research output. It is not live data and does not cover all Norwegian companies.",
+  "company_count": 100,
+  "run_id": "aviscope-20261014T110930Z",
+  "source_commit": "62e36ccf73b744d21f781d7fb6328071aa69304e",
+  "source_repository": "https://github.com/Avi36005/signalpost",
+  "input_sha256": "6c5a6b83daab6806cf173624cf9b57ee716b047aab0c79bc3a24ea7188991e30",
+  "retrieved_from": "2026-10-14T11:11:01.875879Z",
+  "retrieved_to": "2026-10-14T11:11:54.431172Z",
+  "exported_at": "2026-11-06T10:32:34.983214Z",
+  "envelopes_sha256": "20479969c6d1bfc60ebb0636ca4c4899da1176c2c950fb57821509434c8e3a48",
+  "index_sha256": "06428de125238c100edb43c1458ff4dd9a1901632dbe5a0fdd4e6283548a9a36",
+  "files": {
+    "index": "index.json",
+    "company": "companies/{organisation_number}.json"
+  },
+  "excluded": [
+    "local snapshot paths",
+    "retained raw page bodies",
+    "request journals and fetch logs",
+    "error traces and timings",
+    "credentials"
+  ],
+  "identity_rule": "Website, brand and profile claims are shown only with on-page proof of the exact legal name or organisation number."
+}
